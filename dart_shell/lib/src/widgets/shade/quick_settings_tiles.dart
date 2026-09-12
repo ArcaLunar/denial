@@ -16,6 +16,7 @@ import '../../theme/tokens.dart';
 class QuickSettingsTiles extends StatelessWidget {
   const QuickSettingsTiles({
     super.key,
+    this.mobileDataTile,
     required this.wifi,
     required this.wifiSubtitle,
     required this.wifiEnabled,
@@ -37,6 +38,7 @@ class QuickSettingsTiles extends StatelessWidget {
     required this.onCycleProfile,
   });
 
+  final Widget? mobileDataTile;
   final bool wifi;
   final String wifiSubtitle;
   final bool wifiEnabled;
@@ -98,6 +100,14 @@ class QuickSettingsTiles extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          if (mobileDataTile != null) ...[
+            SizedBox(
+              height: 100,
+              width: double.infinity,
+              child: mobileDataTile,
+            ),
+            const SizedBox(height: 10),
+          ],
           SizedBox(
             height: 88,
             child: Row(

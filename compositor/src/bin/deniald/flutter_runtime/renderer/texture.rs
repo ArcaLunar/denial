@@ -387,6 +387,12 @@ pub(crate) struct ShmTextureFrame {
 }
 
 impl ShmTextureFrame {
+    pub(crate) fn new_owned(
+        width: u32, height: u32, revision: u64, rgba: Vec<u8>,
+    ) -> Result<Self, &'static str> {
+        Self::from_pixels(width, height, revision, rgba, Weak::new())
+    }
+
     pub(crate) fn new_pooled(
         width: u32,
         height: u32,

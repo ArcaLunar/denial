@@ -185,6 +185,7 @@ impl WaylandClientBudget {
             budget: Some(Arc::clone(self)),
             surfaces: Mutex::new(HashSet::new()),
             reservation_live: AtomicBool::new(true),
+            peer_uid: None,
         })
     }
 }
@@ -259,6 +260,7 @@ fn opaque_regions_signature(regions: Option<&[Rectangle<i32, Logical>]>) -> (usi
 }
 
 pub(super) struct DenialClientState {
+    pub(super) peer_uid: Option<u32>,
     compositor_state: CompositorClientState,
     budget: Option<Arc<WaylandClientBudget>>,
     surfaces: Mutex<HashSet<ObjectId>>,
@@ -272,6 +274,7 @@ impl Default for DenialClientState {
             budget: None,
             surfaces: Mutex::new(HashSet::new()),
             reservation_live: AtomicBool::new(true),
+            peer_uid: None,
         }
     }
 }

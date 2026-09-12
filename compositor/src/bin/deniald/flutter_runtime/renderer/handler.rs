@@ -537,12 +537,15 @@ impl FlutterGlHandler {
         &self,
         requests: &[OutputFrameRequest],
         views: &mut Vec<i64>,
+        lock_frame_token: u64,
     ) {
         views.clear();
         let mut broker = lock(&self.broker);
         let now = Instant::now();
         for request in requests {
-            if let Some(view) = broker.authorize(*request, now) {
+            let mut request = *request;
+            request.lock_frame_token = lock_frame_token;
+            if let Some(view) = broker.authorize(request, now) {
                 views.push(view);
             }
         }

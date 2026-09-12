@@ -10,6 +10,53 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('new installations use the saved appearance and portable layout', () {
+    final settings = ShellSettings.fromJson(<String, dynamic>{});
+    expect(settings, const ShellSettings());
+    expect(settings.appearance.transparencyMode, ShellTransparencyMode.glass);
+    expect(settings.appearance.cornerRadiusScale, 0.3);
+    expect(settings.appearance.panelOpacity, 0.75);
+    expect(settings.appearance.cardOpacity, 0.4421052631578947);
+    expect(settings.appearance.backdropBlurLevel, ShellBackdropBlurLevel.good);
+    expect(settings.appearance.backdropBlurOpacityThreshold, 0.65);
+    expect(settings.appearance.glass.blurSigma, 17);
+    expect(settings.appearance.glass.thickness, 28);
+    expect(settings.layout.systemBarSide, SystemBarSide.top);
+    expect(settings.layout.systemBarOutputNames, isEmpty);
+    expect(settings.layout.systemBarThickness, 33);
+    expect(settings.layout.maximizePadding, 8);
+    expect(
+      settings.layout.minimizedWindowPlacement,
+      MinimizedWindowPlacement.offscreen,
+    );
+    expect(settings.layout.clipboardTrayEdge, ClipboardTrayEdge.left);
+    expect(settings.layout.clipboardTrayExtent, 160);
+  });
+
+  test(
+    'saved appearance and automatic panel placement survive new defaults',
+    () {
+      const existing = ShellSettings(
+        appearance: ShellAppearanceSettings(
+          transparencyMode: ShellTransparencyMode.blur,
+          cornerRadiusScale: 1,
+          panelOpacity: 0.9,
+          glass: ShellGlassConfiguration(thickness: 20, blurSigma: 14),
+        ),
+        layout: ShellLayoutSettings(
+          systemBarSide: null,
+          systemBarOutputNames: ['DP-4'],
+          systemBarThickness: 32,
+          maximizePadding: 10,
+          minimizedWindowPlacement: MinimizedWindowPlacement.desktop,
+          clipboardTrayEdge: ClipboardTrayEdge.right,
+          clipboardTrayExtent: 250,
+        ),
+      );
+      expect(ShellSettings.fromJson(existing.toJson()), existing);
+    },
+  );
+
   test(
     'idle policy defaults lock and display off on while suspend stays off',
     () {
@@ -177,7 +224,11 @@ void main() {
   });
 
   test('minimized window placement persists and produces a typed patch', () {
-    const previous = ShellSettings();
+    const previous = ShellSettings(
+      layout: ShellLayoutSettings(
+        minimizedWindowPlacement: MinimizedWindowPlacement.desktop,
+      ),
+    );
     final next = previous.copyWith(
       layout: previous.layout.copyWith(
         minimizedWindowPlacement: MinimizedWindowPlacement.offscreen,
@@ -253,11 +304,11 @@ void main() {
     expect(settings.layout.windowLayout, DesktopWindowLayout.stacking);
     expect(settings.layout.systemBarSide, isNull);
     expect(settings.layout.systemBarOutputNames, <String>['DP-1']);
-    expect(settings.layout.systemBarThickness, 32);
+    expect(settings.layout.systemBarThickness, 33);
     expect(settings.layout.maximizePadding, 0);
     expect(
       settings.layout.minimizedWindowPlacement,
-      MinimizedWindowPlacement.desktop,
+      MinimizedWindowPlacement.offscreen,
     );
     expect(settings.layout.clipboardTrayExtent, clipboardTrayMaximumExtent);
     expect(settings.power.idleLockEnabled, isTrue);
@@ -314,7 +365,7 @@ void main() {
     expect(glass.rimWidth, 1.5);
     expect(glass.rimFalloff, 0.89);
     expect(glass.oppositeLightStrength, 0.8);
-    expect(glass, const ShellGlassConfiguration());
+    expect(glass, const ShellGlassConfiguration(thickness: 20));
   });
 
   test('glass appearance and opacity tolerate older and invalid settings', () {
@@ -325,7 +376,7 @@ void main() {
     ]) {
       final glass = ShellGlassConfiguration.fromJson(value);
       expect(glass.appearance, ShellGlassAppearance.dark);
-      expect(glass.opacity, 0.17);
+      expect(glass.opacity, const ShellGlassConfiguration().opacity);
     }
     expect(
       ShellGlassConfiguration.fromJson(<String, dynamic>{
@@ -383,7 +434,7 @@ void main() {
     expect(settings.appearance.glass.blurSigma, 0);
     expect(settings.appearance.glass.quality, 1);
     expect(settings.appearance.glass.thickness, 48);
-    expect(settings.appearance.glass.refraction, 0.55);
+    expect(settings.appearance.glass.refraction, 0.56);
     expect(settings.appearance.glass.dispersion, 0);
     expect(settings.appearance.glass.saturation, 2);
     expect(settings.appearance.glass.tintStrength, 0.4);

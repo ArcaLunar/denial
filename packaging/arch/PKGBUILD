@@ -41,10 +41,13 @@ depends=(
   'zenity'
 )
 optdepends=(
+  'fprintd: fingerprint unlock and enrollment'
+  'sudo: authorize fingerprint management in Settings'
   'denial-ui-development: live Flutter UI editing and hot reload'
   'iwd: Wi-Fi controls without NetworkManager'
   'lact: AMD GPU performance controls'
   'networkmanager: Wi-Fi and network controls through NetworkManager'
+  'modemmanager: mobile signal status and SIM PIN unlock'
   'pipewire-pulse: desktop audio controls'
   'power-profiles-daemon: system power profiles'
   'sddm: graphical login and session selection'

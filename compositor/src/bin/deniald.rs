@@ -4,9 +4,6 @@
 #[cfg(feature = "flutter")]
 #[path = "deniald/authentication.rs"]
 mod authentication;
-#[cfg(feature = "flutter")]
-#[path = "deniald/surface_feedback.rs"]
-mod surface_feedback;
 #[path = "deniald/clipboard.rs"]
 mod clipboard;
 #[path = "deniald/cpu_scheduling.rs"]
@@ -14,6 +11,9 @@ mod cpu_scheduling;
 #[cfg(feature = "flutter")]
 #[path = "deniald/dpms.rs"]
 mod dpms;
+#[cfg(feature = "flutter")]
+#[path = "deniald/fingerprint_presentation.rs"]
+mod fingerprint_presentation;
 #[path = "deniald/egl_context.rs"]
 mod egl_context;
 #[cfg(feature = "flutter")]
@@ -39,6 +39,9 @@ mod frame_loop;
 #[cfg(feature = "flutter")]
 #[path = "deniald/frame_scheduler.rs"]
 mod frame_scheduler;
+#[cfg(feature = "flutter")]
+#[path = "deniald/haptics.rs"]
+mod haptics;
 #[path = "deniald/hotplug_transaction.rs"]
 mod hotplug_transaction;
 #[cfg(feature = "flutter")]
@@ -92,6 +95,9 @@ mod session_activation;
 mod settings;
 #[path = "deniald/startup.rs"]
 mod startup;
+#[cfg(feature = "flutter")]
+#[path = "deniald/surface_feedback.rs"]
+mod surface_feedback;
 #[path = "deniald/system_controls.rs"]
 mod system_controls;
 #[cfg(feature = "flutter")]
@@ -192,8 +198,8 @@ use flutter_scene_sync::{
 #[cfg(feature = "flutter")]
 use flutter_service_sync::{
     publish_software_keyboard_state, synchronize_authentication_boundary, synchronize_clipboard,
-    synchronize_notification_events, synchronize_shell_keyboard, synchronize_system_control_events,
-    synchronize_xembed_tray,
+    synchronize_fingerprint_display_wake, synchronize_notification_events,
+    synchronize_shell_keyboard, synchronize_system_control_events, synchronize_xembed_tray,
 };
 #[cfg(feature = "flutter")]
 use flutter_session::{
@@ -325,6 +331,19 @@ fn render_audit_enabled() -> bool {
 }
 
 fn main() {
+    #[cfg(feature = "flutter")]
+    if std::env::args_os()
+        .skip(1)
+        .eq([std::ffi::OsString::from("--fingerprint-settings")])
+    {
+        if let Err(error) = authentication::fingerprint_settings::run() {
+            println!("{}", serde_json::json!({"event":"unavailable"}));
+            eprintln!("deniald fingerprint settings: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     if let Err(error) = denial_main() {
         // Returning Result::Err from main becomes status 1, which display
         // managers can mistake for an orderly session exit. Preserve the

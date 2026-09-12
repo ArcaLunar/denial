@@ -17,6 +17,7 @@ import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../connectivity/bluetooth_detail_surface.dart';
 import '../connectivity/wifi_detail_surface.dart';
+import '../connectivity/mobile_data_tile.dart';
 import '../session/power_session_surface.dart';
 import '../shell_backdrop_blur.dart';
 import '../retained_translation.dart';
@@ -247,6 +248,7 @@ class _QuickSettingsTilesSection extends ConsumerWidget {
         bluetooth.available &&
         !bluetooth.powerChanging;
     return QuickSettingsTiles(
+      mobileDataTile: const MobileDataTile(),
       wifi:
           networkSnapshot.wirelessEnabled &&
           networkSnapshot.wifiDeviceAvailable,

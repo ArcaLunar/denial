@@ -921,6 +921,8 @@ pub(in super::super) fn init_libinput(
 ) -> Result<(), Box<dyn Error>> {
     #[cfg(feature = "flutter")]
     init_joystick_activity(event_loop, session.clone())?;
+    #[cfg(feature = "flutter")]
+    super::wake_gesture::init(event_loop, session.clone())?;
     let mut context =
         Libinput::new_with_udev::<LibinputSessionInterface<LibSeatSession>>(session.into());
     context
@@ -1282,6 +1284,13 @@ fn process_input_event(
             key_event.state(),
             key_event.time_msec(),
         );
+    }
+
+    #[cfg(feature = "flutter")]
+    if state.fingerprint.active() && matches!(&event,
+        InputEvent::TouchDown { .. } | InputEvent::TouchMotion { .. }
+        | InputEvent::TouchUp { .. } | InputEvent::TouchCancel { .. } | InputEvent::TouchFrame { .. }) {
+        return false;
     }
 
     #[cfg(feature = "flutter")]

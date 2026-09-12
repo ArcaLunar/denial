@@ -376,6 +376,15 @@ impl IdlePolicy {
         Vec::new()
     }
 
+    /// A hardware wake gesture targets one display, including an externally
+    /// blanked display. It can never toggle a lit display off or unlock.
+    pub(super) fn wake_output_now(&mut self, output: OutputId, now: Instant) -> IdlePowerRequest {
+        self.reset_idle_interval(now);
+        self.blanked_outputs.remove(&output);
+        self.manually_blanked &= !self.blanked_outputs.is_empty();
+        IdlePowerRequest { output, powered: true }
+    }
+
     pub(super) fn note_activity(&mut self, now: Instant) -> Vec<IdlePowerRequest> {
         self.reset_idle_interval(now);
         self.wake_blanked_outputs()

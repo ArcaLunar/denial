@@ -1044,5 +1044,92 @@
   "settingsGlassRimWidth": "高光宽度",
   "settingsGlassRimFalloff": "高光衰减",
   "settingsGlassOppositeLight": "对侧边缘光照",
-  "settingsGlassRimPixels": "{width} 像素"
+  "settingsGlassRimPixels": "{width} 像素",
+  "lockFingerprintNotRecognized": "未识别指纹",
+  "fingerprintSection": "指纹",
+  "fingerprintPasswordPrompt": "请输入 sudo 密码以管理指纹。",
+  "fingerprintSudoPassword": "sudo 密码",
+  "fingerprintContinue": "继续",
+  "fingerprintDescription": "使用已录入的指纹解锁 Denial。",
+  "fingerprintEmptyTitle": "尚未录入指纹",
+  "fingerprintEmptyDescription": "在下方选择手指，录入第一个指纹。",
+  "fingerprintChooseFinger": "要录入的手指",
+  "fingerprintEnroll": "录入指纹",
+  "fingerprintAdd": "添加指纹",
+  "fingerprintAuthenticationFailed": "密码验证失败，请重试。",
+  "fingerprintExpired": "请重新输入密码以继续。",
+  "fingerprintPreparing": "正在准备指纹读取器…",
+  "fingerprintTouchSensor": "用所选手指触碰传感器，然后抬起。",
+  "fingerprintEnrolled": "指纹已录入，现在可以用它解锁 Denial。",
+  "fingerprintCancelled": "已取消录入。",
+  "fingerprintDuplicate": "此指纹已录入，请选择另一根手指。",
+  "fingerprintRetry": "抬起手指，调整位置后再次触碰传感器。",
+  "fingerprintUnavailable": "无法完成指纹管理，请检查读取器后重试。",
+  "fingerprintProgress": "已完成 {completed}/{total} 次扫描",
+  "fingerprintLeftThumb": "左拇指",
+  "fingerprintLeftIndex": "左食指",
+  "fingerprintLeftMiddle": "左中指",
+  "fingerprintLeftRing": "左无名指",
+  "fingerprintLeftLittle": "左小指",
+  "fingerprintRightThumb": "右拇指",
+  "fingerprintRightIndex": "右食指",
+  "fingerprintRightMiddle": "右中指",
+  "fingerprintRightRing": "右无名指",
+  "fingerprintRightLittle": "右小指",
+  "mobileData": "移动数据",
+  "mobileConnected": "已连接",
+  "mobileDisconnected": "未连接",
+  "mobileUnavailable": "移动网络不可用",
+  "mobileChangeFailed": "无法更改移动数据",
+  "simPinTitle": "解锁 SIM 卡",
+  "simPinLabel": "SIM PIN",
+  "simPinUnlock": "解锁 SIM 卡",
+  "simPinLater": "稍后",
+  "simPinFailed": "无法解锁 SIM 卡。请检查 PIN 和剩余尝试次数。",
+  "simPukRequired": "SIM 卡需要 PUK。请联系运营商。",
+  "simLocked": "SIM 卡已锁定",
+  "simPinRetries": "剩余 {count} 次尝试",
+  "@simPinRetries": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "@mobileData": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@mobileConnected": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@mobileDisconnected": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@mobileUnavailable": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@mobileChangeFailed": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPinTitle": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPinLabel": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPinUnlock": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPinLater": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPinFailed": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simPukRequired": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  },
+  "@simLocked": {
+    "description": "Mobile connectivity and SIM authentication UI."
+  }
 }

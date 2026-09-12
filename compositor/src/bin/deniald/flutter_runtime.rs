@@ -53,6 +53,10 @@ use super::idle_policy;
 use super::render_audit_enabled;
 use super::wire::{self, WireBridge};
 
+#[path = "flutter_runtime/lock_frame.rs"]
+mod lock_frame;
+#[path = "flutter_runtime/fingerprint_scene.rs"]
+mod fingerprint_scene;
 #[path = "flutter_runtime/mouse_cursor.rs"]
 mod mouse_cursor;
 #[path = "flutter_runtime/platform.rs"]
@@ -484,6 +488,8 @@ pub struct FlutterRuntime {
     frame_interval: Duration,
     kms_frame_clock_enabled: bool,
     outputs_visible: Option<bool>,
+    lock_frame_gate: lock_frame::LockFrameGate,
+    fingerprint_scene: fingerprint_scene::FingerprintScene,
     published_text_input_state: Option<(bool, bool, bool, u32, u32, u64)>,
     frame_ready_observed: bool,
     last_pointer_timestamp_micros: usize,

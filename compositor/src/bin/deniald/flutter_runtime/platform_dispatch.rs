@@ -74,6 +74,12 @@ impl FlutterRuntime {
         // a lock request cannot be followed by one last unredacted read.
         self.clipboard
             .set_locked(self.authentication.security_gate_locked());
+        if message.channel == "denial/haptics" {
+            let result = self.authentication.handle_haptics_packet(&message.data);
+            self.host().respond(&mut message, &[])?;
+            if let Err(error) = result { warn!(%error, "rejected Denial haptics packet"); }
+            return Ok(());
+        }
         if message.channel.as_bytes() == text_input::CHANNEL.to_bytes() {
             let host = self
                 .host
@@ -102,6 +108,16 @@ impl FlutterRuntime {
         // Release Flutter's request handle before dispatching any
         // asynchronous Denial response. The shell receives request/reply
         // data on its dedicated ordered native-to-Flutter channel.
+        if message.channel.as_bytes() == fingerprint_scene::CHANNEL.to_bytes() {
+            let response = self.handle_fingerprint_scene(&message.data);
+            self.host().respond(&mut message, &response)?;
+            return Ok(());
+        }
+        if message.channel.as_bytes() == lock_frame::CHANNEL.to_bytes() {
+            let response = self.handle_lock_frame_message(&message.data);
+            self.host().respond(&mut message, &response)?;
+            return Ok(());
+        }
         self.host().respond(&mut message, &[])?;
         if message.channel.as_bytes() == crate::authentication::CHANNEL.to_bytes() {
             let result = self.authentication.handle_packet(&message.data);

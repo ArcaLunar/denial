@@ -1110,6 +1110,12 @@ fn default_document() -> (
         .expect("default window layout setting serializes");
     set_workspace_settings(&mut document, WorkspaceSettings::default())
         .expect("default workspace settings serialize");
+    // Seed only new documents; existing automatic panel placement stays intact.
+    document
+        .get_mut("layout")
+        .and_then(Value::as_object_mut)
+        .expect("default layout is an object")
+        .insert("systemBarSide".to_owned(), Value::String("top".to_owned()));
     (
         document,
         revision,

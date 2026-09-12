@@ -40,6 +40,8 @@ impl WaylandFrontend {
         #[cfg(feature = "flutter")]
         insets::init(&display_handle);
         #[cfg(feature = "flutter")]
+        crate::fingerprint_presentation::init(&display_handle);
+        #[cfg(feature = "flutter")]
         let idle_inhibitors = IdleInhibitors::new(&display_handle);
         let output_power = OutputPowerManager::new(&display_handle);
         let screencopy = screencopy::ScreencopyManager::new(&display_handle);

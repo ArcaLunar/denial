@@ -293,7 +293,14 @@ void main() {
         ),
         findsNothing,
       );
-      await tester.ensureVisible(clear);
+      await tester.scrollUntilVisible(
+        clear,
+        150,
+        scrollable: find.descendant(
+          of: find.byType(ListView).first,
+          matching: find.byType(Scrollable),
+        ),
+      );
       expect(
         tester.getTopLeft(clear).dy,
         greaterThanOrEqualTo(

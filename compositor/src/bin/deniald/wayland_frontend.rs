@@ -183,11 +183,11 @@ mod touch_gestures;
 mod window_layout_adapter;
 #[path = "wayland_frontend/window_management.rs"]
 mod window_management;
-#[path = "wayland_frontend/window_state.rs"]
-mod window_state;
 #[cfg(feature = "flutter")]
 #[path = "wayland_frontend/window_outputs.rs"]
 mod window_outputs;
+#[path = "wayland_frontend/window_state.rs"]
+mod window_state;
 #[cfg(feature = "flutter")]
 #[path = "wayland_frontend/workspace.rs"]
 mod workspace;
@@ -854,13 +854,14 @@ fn init_listener(
                 warn!("discarding Wayland connection without frontend state");
                 return;
             };
-            let Some(client_state) = client_budget.try_reserve_client() else {
+            let Some(mut client_state) = client_budget.try_reserve_client() else {
                 warn!(
                     limit = MAX_WAYLAND_CLIENTS,
                     "discarding Wayland connection because the client budget is exhausted"
                 );
                 return;
             };
+            client_state.peer_uid = socket_peer_uid(&client_stream);
             if let Err(error) = frontend
                 .display_handle
                 .insert_client(client_stream, Arc::new(client_state))
@@ -902,3 +903,34 @@ fn transform_to_wire(transform: Transform) -> u32 {
 }
 
 smithay::delegate_dispatch2!(RuntimeState);
+
+// Cache peer identity before inserting the socket. Global visibility callbacks
+// run under the Wayland backend lock and must never re-enter it for credentials.
+fn socket_peer_uid(stream: &std::os::unix::net::UnixStream) -> Option<u32> {
+    use std::os::fd::AsRawFd;
+    let mut credentials = std::mem::MaybeUninit::<libc::ucred>::uninit();
+    let mut size = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
+    // SAFETY: getsockopt writes at most size bytes to a correctly sized ucred.
+    let status = unsafe { libc::getsockopt(stream.as_raw_fd(), libc::SOL_SOCKET,
+        libc::SO_PEERCRED, credentials.as_mut_ptr().cast(), &mut size) };
+    if status != 0 || size as usize != std::mem::size_of::<libc::ucred>() { return None; }
+    // SAFETY: the successful call initialized the complete structure.
+    Some(unsafe { credentials.assume_init() }.uid)
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn is_root_client(client: &Client) -> bool {
+    client.get_data::<handlers::DenialClientState>()
+        .is_some_and(|state| state.peer_uid == Some(0))
+}
+
+#[cfg(all(test, feature = "flutter"))]
+pub(super) fn fingerprint_test_client(uid: Option<u32>) -> Arc<dyn ClientData> {
+    let mut data = handlers::DenialClientState::default();
+    data.peer_uid = uid;
+    Arc::new(data)
+}
+
+#[cfg(feature = "flutter")]
+#[path = "wayland_frontend/wake_gesture.rs"]
+mod wake_gesture;

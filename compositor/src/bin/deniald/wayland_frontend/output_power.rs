@@ -140,6 +140,12 @@ impl WaylandFrontend {
             } else {
                 zwlr_output_power_v1::Mode::Off
             });
+            // KMS applies power transitions outside Wayland client dispatch.
+            // Deliver the event now: a sleeping client may send no requests
+            // that would otherwise flush this notification.
+            if let Err(error) = self.display_handle.flush_clients() {
+                tracing::warn!(%error, "failed to flush output power state");
+            }
         }
     }
 

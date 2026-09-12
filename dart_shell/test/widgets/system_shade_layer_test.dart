@@ -1,3 +1,4 @@
+import 'package:denial_dart_shell/src/services/mobile_network_service.dart';
 import 'package:denial_dart_shell/src/localization/denial_localizations.dart';
 import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
@@ -21,6 +22,9 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          mobileNetworkProvider.overrideWith(
+            (_) => Stream.value(const MobileNetworkSnapshot()),
+          ),
           clockProvider.overrideWith((_) => Stream.value(DateTime(2026, 9, 5))),
           networkConnectivityProvider.overrideWithBuild(
             (_, _) => NetworkConnectivityState.initial(),

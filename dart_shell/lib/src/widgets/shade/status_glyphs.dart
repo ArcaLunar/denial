@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../state/network_connectivity.dart';
+import '../../services/mobile_network_service.dart';
 
 import '../../models/battery_status.dart';
 import '../../localization/denial_localizations.dart';
@@ -148,9 +151,16 @@ class BatteryIconMark extends StatelessWidget {
 
 /// Wi-Fi status icon.
 class WifiMark extends StatelessWidget {
-  const WifiMark({super.key, required this.active, this.size = 17, this.color});
+  const WifiMark({
+    super.key,
+    required this.active,
+    this.strength = 0,
+    this.size = 17,
+    this.color,
+  });
 
   final bool active;
+  final int strength;
   final double size;
   final Color? color;
 
@@ -158,7 +168,15 @@ class WifiMark extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = color ?? context.shellColors.textPrimary;
     return Icon(
-      Icons.wifi_rounded,
+      !active
+          ? Icons.wifi_off_rounded
+          : strength == 0
+          ? Icons.signal_wifi_0_bar
+          : strength < 34
+          ? Icons.network_wifi_1_bar
+          : strength < 67
+          ? Icons.network_wifi_2_bar
+          : Icons.wifi_rounded,
       color: active ? foreground : foreground.withValues(alpha: 0.42),
       size: size,
     );
@@ -170,18 +188,20 @@ class SignalGlyph extends StatelessWidget {
   const SignalGlyph({
     super.key,
     required this.active,
+    this.strength = 0,
     this.scale = 1.0,
     this.color,
   });
 
   final bool active;
+  final int strength;
   final double scale;
   final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final foreground = color ?? context.shellColors.textPrimary;
-    final glyphColor = active ? foreground : foreground.withValues(alpha: 0.42);
+    final bars = active ? (strength.clamp(0, 100) / 25).ceil() : 0;
     return SizedBox(
       width: 18 * scale,
       height: 12 * scale,
@@ -193,7 +213,9 @@ class SignalGlyph extends StatelessWidget {
               width: 3 * scale,
               height: (4.0 + i * 2.2) * scale,
               decoration: BoxDecoration(
-                color: glyphColor,
+                color: i < bars
+                    ? foreground
+                    : foreground.withValues(alpha: 0.25),
                 borderRadius: context.shellTheme.borderRadius(1.5 * scale),
               ),
             ),
@@ -218,9 +240,7 @@ class StatusCluster extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SignalGlyph(active: true, scale: 1.25, color: color),
-        const SizedBox(width: 10),
-        WifiMark(active: true, size: 21, color: color),
+        MobileConnectivityMarks(color: color),
         const SizedBox(width: 11),
         BatteryMark(status: battery, scale: 1.18, color: color),
       ],
@@ -239,11 +259,54 @@ class StatusIconCluster extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        SignalGlyph(active: true, scale: 1.2, color: color),
-        const SizedBox(width: 10),
-        WifiMark(active: true, size: 20, color: color),
+        MobileConnectivityMarks(color: color),
         const SizedBox(width: 11),
         BatteryIconMark(status: battery, scale: 1.18, color: color),
+      ],
+    );
+  }
+}
+
+class MobileConnectivityMarks extends ConsumerWidget {
+  const MobileConnectivityMarks({super.key, this.color});
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wifi = ref
+        .watch(networkConnectivityProvider)
+        .snapshot
+        .connectedNetwork;
+    final mobile =
+        ref.watch(mobileNetworkProvider).value ?? const MobileNetworkSnapshot();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          label: mobile.connected
+              ? context.l10n.mobileConnected
+              : context.l10n.mobileDisconnected,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SignalGlyph(
+                active: mobile.registered,
+                strength: mobile.strength,
+                scale: 1.25,
+                color: color,
+              ),
+              if (!mobile.connected)
+                Icon(Icons.priority_high_rounded, size: 12, color: color),
+            ],
+          ),
+        ),
+        const SizedBox(width: 10),
+        WifiMark(
+          active: wifi != null,
+          strength: wifi?.strength ?? 0,
+          size: 21,
+          color: color,
+        ),
       ],
     );
   }

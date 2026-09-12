@@ -50,7 +50,7 @@ const int defaultWorkspaceCount = 4;
 
 const double clipboardTrayMinimumExtent = 100;
 const double clipboardTrayMaximumExtent = 300;
-const double clipboardTrayDefaultExtent = 250;
+const double clipboardTrayDefaultExtent = 160;
 const double launcherOverlayMinimumHeight = 200;
 
 enum ShellLocalePreference { system, english, simplifiedChinese }
@@ -86,12 +86,12 @@ class ShellAppearanceSettings {
     this.colorSchemePreference = DesktopColorSchemePreference.preferDark,
     this.accentSource = ShellAccentSource.wallpaper,
     this.customAccentColor = ShellBrandColors.defaultAccent,
-    this.cornerRadiusScale = ShellRoundness.normal,
-    this.panelOpacity = ShellOpacity.panel,
-    this.cardOpacity = ShellOpacity.card,
-    this.transparencyMode = ShellTransparencyMode.blur,
-    this.backdropBlurLevel = ShellBackdropBlurLevel.fast,
-    this.backdropBlurOpacityThreshold = 0.2,
+    this.cornerRadiusScale = 0.3,
+    this.panelOpacity = 0.75,
+    this.cardOpacity = 0.4421052631578947,
+    this.transparencyMode = ShellTransparencyMode.glass,
+    this.backdropBlurLevel = ShellBackdropBlurLevel.good,
+    this.backdropBlurOpacityThreshold = 0.65,
     this.glass = const ShellGlassConfiguration(),
     this.focusedWindowBorderEnabled = true,
     this.focusedWindowOpacity = 1,
@@ -255,12 +255,12 @@ class ShellLayoutSettings {
     this.windowLayout = DesktopWindowLayout.stacking,
     this.workspacesEnabled = false,
     this.workspaceCount = defaultWorkspaceCount,
-    this.systemBarSide,
+    this.systemBarSide = SystemBarSide.top,
     this.systemBarOutputNames = const <String>[],
-    this.systemBarThickness = 32,
-    this.maximizePadding = 10,
-    this.minimizedWindowPlacement = MinimizedWindowPlacement.desktop,
-    this.clipboardTrayEdge = ClipboardTrayEdge.right,
+    this.systemBarThickness = 33,
+    this.maximizePadding = 8,
+    this.minimizedWindowPlacement = MinimizedWindowPlacement.offscreen,
+    this.clipboardTrayEdge = ClipboardTrayEdge.left,
     this.clipboardTrayExtent = clipboardTrayDefaultExtent,
   });
 
@@ -1072,11 +1072,11 @@ class ShellSettings {
         'cursorThemeId': appearance.cursorThemeId,
         'allowClientCursorSurfaces': appearance.allowClientCursorSurfaces,
       },
-      'layout': <String, Object>{
+      'layout': <String, Object?>{
         'windowLayout': layout.windowLayout.name,
         'workspacesEnabled': layout.workspacesEnabled,
         'workspaceCount': layout.workspaceCount,
-        if (layout.systemBarSide case final side?) 'systemBarSide': side.name,
+        'systemBarSide': layout.systemBarSide?.name,
         'systemBarOutputs': layout.systemBarOutputNames,
         'systemBarThickness': layout.systemBarThickness,
         'maximizePadding': layout.maximizePadding,
@@ -1196,10 +1196,10 @@ class ShellSettings {
               idleSuspendTimeoutMinutes,
             )
             .toInt();
-    final legacyTransparencyMode =
-        appearanceJson['backdropBlurEnabled'] is bool &&
-            !(appearanceJson['backdropBlurEnabled'] as bool)
-        ? ShellTransparencyMode.off
+    final legacyTransparencyMode = appearanceJson['backdropBlurEnabled'] is bool
+        ? (appearanceJson['backdropBlurEnabled'] as bool
+              ? ShellTransparencyMode.blur
+              : ShellTransparencyMode.off)
         : defaults.appearance.transparencyMode;
     return ShellSettings(
       localization: ShellLocalizationSettings(
@@ -1308,10 +1308,12 @@ class ShellSettings {
           minimumWorkspaceCount,
           maximumWorkspaceCount,
         ),
-        systemBarSide: _nullableEnumValue(
-          SystemBarSide.values,
-          layoutJson['systemBarSide'],
-        ),
+        systemBarSide: layoutJson.isNotEmpty
+            ? _nullableEnumValue(
+                SystemBarSide.values,
+                layoutJson['systemBarSide'],
+              )
+            : defaults.layout.systemBarSide,
         systemBarOutputNames: List<String>.unmodifiable(outputNames),
         systemBarThickness: _number(
           layoutJson['systemBarThickness'],

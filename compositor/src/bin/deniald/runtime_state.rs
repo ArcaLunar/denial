@@ -4,6 +4,8 @@ use super::*;
 
 #[derive(Default)]
 pub(super) struct RuntimeState {
+    #[cfg(feature = "flutter")]
+    pub(super) fingerprint: fingerprint_presentation::Controller,
     pub(super) pending: HashSet<crtc::Handle>,
     pub(super) completed_page_flips: VecDeque<PageFlipCompletion>,
     pub(super) scanout_rebased: bool,
@@ -105,6 +107,8 @@ pub(super) struct RuntimeState {
     pub(super) idle_policy: idle_policy::IdlePolicy,
     #[cfg(feature = "flutter")]
     pub(super) power_button: idle_policy::PowerButton,
+    #[cfg(feature = "flutter")]
+    pub(super) wake_gesture_outputs: BTreeSet<String>,
 }
 
 #[cfg(feature = "flutter")]

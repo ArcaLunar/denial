@@ -436,6 +436,14 @@ pub(super) fn run_flutter_event_loop(
             )?;
         }
         if !scanout_rebased {
+            let (changed, power) = events.fingerprint.service(drm, renderer, scanouts, flutter.as_mut().ok_or("fingerprint requires Flutter")?)?;
+            for (output, powered) in power {
+                events.output_power_requests.insert(output, powered);
+            }
+            if changed {
+                frame_scheduler.mark_all_dirty();
+                wayland_frontend::reset_all_input_devices(&mut events);
+            }
             let runtime = flutter
                 .as_mut()
                 .ok_or("Flutter runtime disappeared during page-flip completion")?;
@@ -496,7 +504,7 @@ pub(super) fn run_flutter_event_loop(
             // following frame already occupies Ready. Move that frame into
             // the now-free Volition slot before the timer decision, exposing
             // the third pool entry for exactly one new raster lookahead.
-            submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+            submit_ready_frames(runtime, &mut scheduler, swapchain, scanouts, &mut events)?;
 
             loop {
                 let Some(ready) =
@@ -567,7 +575,7 @@ pub(super) fn run_flutter_event_loop(
             // This remains ahead of input, Wayland traversal, and background
             // shell synchronization, but follows frame-clock authorization so
             // those tasks cannot perturb Flutter's animation timestamp.
-            submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+            submit_ready_frames(runtime, &mut scheduler, swapchain, scanouts, &mut events)?;
             for tick in frame_scheduler.output_ticks().iter().copied() {
                 if let Some(frontend) = events.wayland.as_mut() {
                     frontend.frame_tick(tick)?;
@@ -636,7 +644,9 @@ pub(super) fn run_flutter_event_loop(
         if background_maintenance_due {
             synchronize_idle_dpms(scanouts, &mut events, background_started);
         }
+        dpms::synchronize_wake_gestures(scanouts, &mut events);
         synchronize_power_button(scanouts, &mut events);
+        synchronize_fingerprint_display_wake(scanouts, &scheduler, &mut events);
         // The synchronous VT-resume commit invalidated the old scheduler's
         // per-output buffer ownership. Preserve requests until the topology
         // path below recreates that scheduler.
@@ -757,7 +767,15 @@ pub(super) fn run_flutter_event_loop(
                 continue;
             }
             if scheduler.has_pending_scanout_work() {
-                submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+                submit_ready_frames(
+                    flutter
+                        .as_ref()
+                        .ok_or("Flutter runtime disappeared before frame submission")?,
+                    &mut scheduler,
+                    swapchain,
+                    scanouts,
+                    &mut events,
+                )?;
                 events.pending_output_applies.push_front(request);
                 let now = Instant::now();
                 let timeout = deadline.map_or(Duration::from_millis(50), |deadline| {
@@ -801,7 +819,15 @@ pub(super) fn run_flutter_event_loop(
                 // old-geometry frame instead of treating normal scheduler
                 // ownership as a fatal reconfiguration error.
                 ready_output_apply = Some((request, connectors));
-                submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+                submit_ready_frames(
+                    flutter
+                        .as_ref()
+                        .ok_or("Flutter runtime disappeared before frame submission")?,
+                    &mut scheduler,
+                    swapchain,
+                    scanouts,
+                    &mut events,
+                )?;
                 let now = Instant::now();
                 let timeout = deadline.map_or(Duration::from_millis(50), |deadline| {
                     Duration::from_millis(50).min(deadline.saturating_duration_since(now))
@@ -1297,7 +1323,15 @@ pub(super) fn run_flutter_event_loop(
                     // common rollback point used by the hotplug transaction.
                     // A signalled ready fence can enter Volition lookahead;
                     // an unfinished one will wake this loop through calloop.
-                    submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+                    submit_ready_frames(
+                        flutter
+                            .as_ref()
+                            .ok_or("Flutter runtime disappeared before frame submission")?,
+                        &mut scheduler,
+                        swapchain,
+                        scanouts,
+                        &mut events,
+                    )?;
                     events.topology_dirty = true;
                     events.kms_reconfigure_requested = kms_reconfigure_requested;
                     events.resident_geometry_reconfigure_requested =
@@ -1418,7 +1452,15 @@ pub(super) fn run_flutter_event_loop(
                 // every affected CRTC. A ready fence or page flip will wake
                 // this loop through calloop, without disturbing clients or
                 // the graphical session.
-                submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+                submit_ready_frames(
+                    flutter
+                        .as_ref()
+                        .ok_or("Flutter runtime disappeared before frame submission")?,
+                    &mut scheduler,
+                    swapchain,
+                    scanouts,
+                    &mut events,
+                )?;
                 let now = Instant::now();
                 let timeout = deadline.map_or(Duration::from_millis(50), |deadline| {
                     Duration::from_millis(50).min(deadline.saturating_duration_since(now))
@@ -1684,6 +1726,9 @@ pub(super) fn run_flutter_event_loop(
         next_dispatch_timeout = events
             .dpms_topology
             .limit_dispatch_timeout(now, next_dispatch_timeout);
+        if events.fingerprint.active() {
+            next_dispatch_timeout = next_dispatch_timeout.min(Duration::from_millis(20));
+        }
         if drm.is_active() {
             next_dispatch_timeout =
                 scheduler.limit_presentation_watchdog_timeout(now, next_dispatch_timeout);

@@ -49,12 +49,14 @@ pub(super) fn install_ready_fence_watch(
 
 #[cfg(feature = "flutter")]
 pub(super) fn submit_ready_frames(
+    runtime: &flutter_runtime::FlutterRuntime,
     scheduler: &mut output_scheduler::OutputScheduler,
     swapchain: &RenderSwapchains,
     scanouts: &[Scanout],
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
     scheduler.submit_ready(
+        runtime,
         swapchain
             .outputs()
             .ok_or("ready submission has no physical output pools")?,
