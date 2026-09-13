@@ -1209,10 +1209,10 @@ impl flatbuffers::SimpleToVerifyInSlice for SettingsResponseKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_SHORTCUT_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_SHORTCUT_ACTION_KIND: u8 = 52;
+pub const ENUM_MAX_SHORTCUT_ACTION_KIND: u8 = 53;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 53] = [
+pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 54] = [
   ShortcutActionKind::Shutdown,
   ShortcutActionKind::OpenApplications,
   ShortcutActionKind::OpenOverview,
@@ -1266,6 +1266,7 @@ pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 53] = [
   ShortcutActionKind::MoveToWorkspace7,
   ShortcutActionKind::MoveToWorkspace8,
   ShortcutActionKind::MoveToWorkspace9,
+  ShortcutActionKind::ToggleWindowAlwaysOnTop,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -1326,9 +1327,10 @@ impl ShortcutActionKind {
   pub const MoveToWorkspace7: Self = Self(50);
   pub const MoveToWorkspace8: Self = Self(51);
   pub const MoveToWorkspace9: Self = Self(52);
+  pub const ToggleWindowAlwaysOnTop: Self = Self(53);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 52;
+  pub const ENUM_MAX: u8 = 53;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Shutdown,
     Self::OpenApplications,
@@ -1383,6 +1385,7 @@ impl ShortcutActionKind {
     Self::MoveToWorkspace7,
     Self::MoveToWorkspace8,
     Self::MoveToWorkspace9,
+    Self::ToggleWindowAlwaysOnTop,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -1440,6 +1443,7 @@ impl ShortcutActionKind {
       Self::MoveToWorkspace7 => Some("MoveToWorkspace7"),
       Self::MoveToWorkspace8 => Some("MoveToWorkspace8"),
       Self::MoveToWorkspace9 => Some("MoveToWorkspace9"),
+      Self::ToggleWindowAlwaysOnTop => Some("ToggleWindowAlwaysOnTop"),
       _ => None,
     }
   }

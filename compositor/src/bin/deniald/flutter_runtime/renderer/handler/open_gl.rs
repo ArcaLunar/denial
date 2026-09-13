@@ -32,6 +32,9 @@ impl Drop for RenderAuditCallbackTimer<'_> {
 
 impl OpenGlHandler for FlutterGlHandler {
     fn make_current(&self) -> bool {
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return false;
+        }
         let _audit_timer = RenderAuditCallbackTimer::new(
             self.render_audit.as_ref(),
             RenderAuditStage::ContextMakeCurrent,
@@ -52,11 +55,36 @@ impl OpenGlHandler for FlutterGlHandler {
     }
 
     fn clear_current(&self) -> bool {
-        lock(&self.render_context).clear_current()
+        let mut render_context = lock(&self.render_context);
+        if render_context.context.is_current() {
+            return render_context.clear_current();
+        }
+        drop(render_context);
+
+        let mut resource_context = lock(&self.resource_context);
+        if resource_context.context.is_current() {
+            return resource_context.clear_current();
+        }
+
+        // Flutter may pair clear_current with a failed make-current callback.
+        // In that case this thread owns neither Denial context and there is
+        // nothing to release.
+        true
     }
 
     fn make_resource_current(&self) -> bool {
+        if self.shutdown_started.load(Ordering::Acquire) {
+            return false;
+        }
         lock(&self.resource_context).make_current()
+    }
+
+    fn begin_shutdown(&self) {
+        self.shutdown_started.store(true, Ordering::Release);
+    }
+
+    fn shutdown_on_render_thread(&self) -> bool {
+        self.destroy_targets()
     }
 
     fn raster_idle(&self) {

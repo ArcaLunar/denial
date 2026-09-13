@@ -2329,6 +2329,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Four-finger swipe right';
 
   @override
+  String get settingsShortcutGestureFourFingerSwipeUp => 'Four-finger swipe up';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeDown =>
+      'Four-finger swipe down';
+
+  @override
   String get settingsShortcutInputCategoryModifier => 'Modifier';
 
   @override
@@ -2398,6 +2405,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsShortcutActionToggleFullscreen =>
       'Enter or leave fullscreen';
+
+  @override
+  String get settingsShortcutActionToggleWindowAlwaysOnTop =>
+      'Toggle always on top';
 
   @override
   String get settingsShortcutActionReleasePointer => 'Release pointer';
@@ -2487,13 +2498,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWindowLayoutDescription =>
-      'Stacking lets windows overlap and move freely. Tiling uses a dynamic binary tree while keeping transient windows floating.';
+      'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling arranges full-height columns in a focus-following horizontal strip.';
 
   @override
   String get settingsWindowLayoutDwindle => 'Tiling';
 
   @override
   String get settingsWindowLayoutStacking => 'Stacking';
+
+  @override
+  String get settingsWindowLayoutScrolling => 'Scrolling';
 
   @override
   String get settingsWindowLayoutTitle => 'Window layout';
@@ -2510,6 +2524,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWorkspaceCount => 'Workspace count';
+
+  @override
+  String get settingsWorkspaceSwitchingOrientation => 'Switching direction';
+
+  @override
+  String get settingsWorkspaceSwitchingHorizontal => 'Horizontal';
+
+  @override
+  String get settingsWorkspaceSwitchingVertical => 'Vertical';
 
   @override
   String workspaceLabel(int workspace) {

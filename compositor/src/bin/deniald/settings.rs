@@ -23,7 +23,7 @@ use denial_core::portal_protocol::{DesktopColorSchemePreference, DesktopThemeSna
 
 use super::window_layout::WindowLayoutKind;
 
-pub(super) const SETTINGS_SCHEMA_VERSION: u64 = 24;
+pub(super) const SETTINGS_SCHEMA_VERSION: u64 = 25;
 pub(super) const MIN_WORKSPACE_COUNT: u8 = 2;
 pub(super) const MAX_WORKSPACE_COUNT: u8 = 9;
 pub(super) const DEFAULT_WORKSPACE_COUNT: u8 = 4;
@@ -939,6 +939,31 @@ struct ParsedSettingsDocument {
 pub(super) struct WorkspaceSettings {
     pub(super) enabled: bool,
     pub(super) count: u8,
+    pub(super) switching_orientation: WorkspaceSwitchingOrientation,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) enum WorkspaceSwitchingOrientation {
+    #[default]
+    Horizontal,
+    Vertical,
+}
+
+impl WorkspaceSwitchingOrientation {
+    fn from_settings_name(value: &str) -> Option<Self> {
+        match value {
+            "horizontal" => Some(Self::Horizontal),
+            "vertical" => Some(Self::Vertical),
+            _ => None,
+        }
+    }
+
+    fn settings_name(self) -> &'static str {
+        match self {
+            Self::Horizontal => "horizontal",
+            Self::Vertical => "vertical",
+        }
+    }
 }
 
 impl Default for WorkspaceSettings {
@@ -946,6 +971,7 @@ impl Default for WorkspaceSettings {
         Self {
             enabled: false,
             count: DEFAULT_WORKSPACE_COUNT,
+            switching_orientation: WorkspaceSwitchingOrientation::Horizontal,
         }
     }
 }
@@ -1026,7 +1052,9 @@ fn parse_document(bytes: &[u8]) -> Result<ParsedSettingsDocument, SettingsError>
         .get("layout")
         .and_then(Value::as_object)
         .is_some_and(|layout| {
-            layout.contains_key("workspacesEnabled") && layout.contains_key("workspaceCount")
+            layout.contains_key("workspacesEnabled")
+                && layout.contains_key("workspaceCount")
+                && layout.contains_key("workspaceSwitchingOrientation")
         });
     let workspace_settings = if had_workspace_settings {
         parse_workspace_settings(&document)?
@@ -1258,7 +1286,20 @@ fn parse_workspace_settings(
                 "layout.workspaceCount must be within {MIN_WORKSPACE_COUNT}..={MAX_WORKSPACE_COUNT}"
             ))
         })?;
-    Ok(WorkspaceSettings { enabled, count })
+    let switching_orientation = layout
+        .get("workspaceSwitchingOrientation")
+        .and_then(Value::as_str)
+        .and_then(WorkspaceSwitchingOrientation::from_settings_name)
+        .ok_or_else(|| {
+            SettingsError::Document(
+                "layout.workspaceSwitchingOrientation must be horizontal or vertical".to_owned(),
+            )
+        })?;
+    Ok(WorkspaceSettings {
+        enabled,
+        count,
+        switching_orientation,
+    })
 }
 
 fn set_workspace_settings(
@@ -1277,6 +1318,10 @@ fn set_workspace_settings(
         Value::Bool(workspaces.enabled),
     );
     layout.insert("workspaceCount".to_owned(), Value::from(workspaces.count));
+    layout.insert(
+        "workspaceSwitchingOrientation".to_owned(),
+        Value::String(workspaces.switching_orientation.settings_name().to_owned()),
+    );
     Ok(())
 }
 

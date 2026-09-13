@@ -77,7 +77,9 @@ impl FlutterRuntime {
         if message.channel == "denial/haptics" {
             let result = self.authentication.handle_haptics_packet(&message.data);
             self.host().respond(&mut message, &[])?;
-            if let Err(error) = result { warn!(%error, "rejected Denial haptics packet"); }
+            if let Err(error) = result {
+                warn!(%error, "rejected Denial haptics packet");
+            }
             return Ok(());
         }
         if message.channel.as_bytes() == text_input::CHANNEL.to_bytes() {
@@ -266,7 +268,7 @@ impl FlutterRuntime {
         }
         let result = host.shutdown();
         if result.is_ok() {
-            self.handler.destroy_targets();
+            let _ = self.handler.destroy_targets();
         } else {
             // The leaked EngineHost owns another Arc to this handler. Do not
             // destroy GL targets or external texture sources that an engine

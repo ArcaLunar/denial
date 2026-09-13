@@ -50,6 +50,9 @@ fn shell_document(value: Value) -> String {
     layout
         .entry("workspaceCount")
         .or_insert(Value::from(DEFAULT_WORKSPACE_COUNT));
+    layout
+        .entry("workspaceSwitchingOrientation")
+        .or_insert_with(|| Value::String("horizontal".to_owned()));
     document.insert("version".to_owned(), Value::from(SETTINGS_SCHEMA_VERSION));
     serde_json::to_string(&document).expect("test shell document serializes")
 }
@@ -77,6 +80,10 @@ fn migrates_existing_shell_document_without_losing_sections() {
     assert_eq!(document["layout"]["windowLayout"], "stacking");
     assert_eq!(document["layout"]["workspacesEnabled"], false);
     assert_eq!(document["layout"]["workspaceCount"], 4);
+    assert_eq!(
+        document["layout"]["workspaceSwitchingOrientation"],
+        "horizontal"
+    );
     assert_eq!(manager.workspace_settings(), WorkspaceSettings::default());
     assert_eq!(manager.window_layout_kind(), WindowLayoutKind::Stacking);
     assert!(manager.allow_client_cursor_surfaces());
@@ -227,6 +234,18 @@ fn window_layout_is_validated_and_persisted() {
             .window_layout_kind(),
         WindowLayoutKind::Dwindle
     );
+
+    let update = manager
+        .prepare_shell_update(
+            manager.revision(),
+            &shell_document(serde_json::json!({
+                "appearance": {"colorSchemePreference": "preferDark"},
+                "layout": {"windowLayout": "scrolling"}
+            })),
+        )
+        .unwrap();
+    manager.commit(update).unwrap();
+    assert_eq!(manager.window_layout_kind(), WindowLayoutKind::Scrolling);
 
     for window_layout in [Value::String("columns".to_owned()), Value::Bool(true)] {
         let document = shell_document(serde_json::json!({

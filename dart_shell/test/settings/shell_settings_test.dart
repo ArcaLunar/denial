@@ -201,6 +201,17 @@ void main() {
     expect(next.differenceFrom(previous), <String, Object?>{
       'layout': <String, Object?>{'windowLayout': 'dwindle'},
     });
+
+    final scrolling = next.copyWith(
+      layout: next.layout.copyWith(windowLayout: DesktopWindowLayout.scrolling),
+    );
+    expect(
+      ShellSettings.fromJson(scrolling.toJson()).layout.windowLayout,
+      DesktopWindowLayout.scrolling,
+    );
+    expect(scrolling.differenceFrom(next), <String, Object?>{
+      'layout': <String, Object?>{'windowLayout': 'scrolling'},
+    });
   });
 
   test('workspace settings persist and produce a typed patch', () {
@@ -209,16 +220,22 @@ void main() {
       layout: previous.layout.copyWith(
         workspacesEnabled: true,
         workspaceCount: 6,
+        workspaceSwitchingOrientation: WorkspaceSwitchingOrientation.vertical,
       ),
     );
 
     final restored = ShellSettings.fromJson(next.toJson());
     expect(restored.layout.workspacesEnabled, isTrue);
     expect(restored.layout.workspaceCount, 6);
+    expect(
+      restored.layout.workspaceSwitchingOrientation,
+      WorkspaceSwitchingOrientation.vertical,
+    );
     expect(next.differenceFrom(previous), <String, Object?>{
       'layout': <String, Object?>{
         'workspacesEnabled': true,
         'workspaceCount': 6,
+        'workspaceSwitchingOrientation': 'vertical',
       },
     });
   });

@@ -34,6 +34,26 @@ impl WaylandFrontend {
     /// events in their overlap.
     pub(super) fn raise_window(&mut self, window: &Window, activate: bool) {
         self.space.raise_element(window, activate);
+        if activate {
+            self.activate_layout_window(window);
+        }
+        #[cfg(feature = "flutter")]
+        let pinned_windows = {
+            let raised_is_pinned = self.window_is_pinned(window);
+            if raised_is_pinned {
+                Vec::new()
+            } else {
+                self.space
+                    .elements()
+                    .filter(|candidate| self.window_is_pinned(candidate))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
+        };
+        #[cfg(feature = "flutter")]
+        for pinned in &pinned_windows {
+            self.space.raise_element(pinned, false);
+        }
         let Some(surface) = window.x11_surface().cloned() else {
             return;
         };
@@ -51,6 +71,19 @@ impl WaylandFrontend {
                 window = surface.window_id(),
                 "could not synchronize raised X11 window"
             );
+        }
+        #[cfg(feature = "flutter")]
+        for pinned in pinned_windows {
+            let Some(surface) = pinned.x11_surface() else {
+                continue;
+            };
+            if let Err(error) = xwm.raise_window(surface) {
+                warn!(
+                    %error,
+                    window = surface.window_id(),
+                    "could not preserve pinned X11 window order"
+                );
+            }
         }
     }
 
@@ -71,6 +104,17 @@ impl WaylandFrontend {
     pub(super) fn window_shell_fullscreen_locked(&self, window: &Window) -> bool {
         self.window_root_surface(window)
             .is_some_and(|root_surface| self.shell_fullscreen_locks.contains(&root_surface.id()))
+    }
+
+    #[cfg(feature = "flutter")]
+    pub(super) fn window_is_pinned(&self, window: &Window) -> bool {
+        let own_id = self
+            .window_root_surface(window)
+            .and_then(|surface| self.surface_id(&surface));
+        own_id.is_some_and(|window_id| self.pinned_windows.contains(&window_id))
+            || self
+                .transient_parent_stable_id(window)
+                .is_some_and(|window_id| self.pinned_windows.contains(&window_id))
     }
 
     #[cfg(feature = "flutter")]
@@ -1040,6 +1084,7 @@ impl WaylandFrontend {
     pub(super) fn remove_local_flutter_window(&mut self, window_id: u64) -> bool {
         self.local_vertical_restore_geometries.remove(&window_id);
         self.minimized_local_windows.remove(&window_id);
+        self.pinned_windows.remove(&window_id);
         self.forget_window_workspace(window_id);
         self.local_windows.remove(window_id)
     }
@@ -1199,6 +1244,7 @@ impl WaylandFrontend {
             self.surface_buffer_revisions.remove(&object_id);
             self.minimized_windows.remove(&object_id);
             if let Some(stable_id) = stable_id {
+                self.pinned_windows.remove(&stable_id);
                 self.forget_window_workspace(stable_id);
             }
             self.shell_fullscreen_locks.remove(&object_id);

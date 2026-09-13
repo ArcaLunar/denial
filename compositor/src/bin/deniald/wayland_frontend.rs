@@ -464,6 +464,8 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     shell_fullscreen_locks: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]
+    pinned_windows: HashSet<u64>,
+    #[cfg(feature = "flutter")]
     visible_window_ids: HashSet<u64>,
     #[cfg(feature = "flutter")]
     input_root_ids: HashMap<ObjectId, u64>,
@@ -911,16 +913,26 @@ fn socket_peer_uid(stream: &std::os::unix::net::UnixStream) -> Option<u32> {
     let mut credentials = std::mem::MaybeUninit::<libc::ucred>::uninit();
     let mut size = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
     // SAFETY: getsockopt writes at most size bytes to a correctly sized ucred.
-    let status = unsafe { libc::getsockopt(stream.as_raw_fd(), libc::SOL_SOCKET,
-        libc::SO_PEERCRED, credentials.as_mut_ptr().cast(), &mut size) };
-    if status != 0 || size as usize != std::mem::size_of::<libc::ucred>() { return None; }
+    let status = unsafe {
+        libc::getsockopt(
+            stream.as_raw_fd(),
+            libc::SOL_SOCKET,
+            libc::SO_PEERCRED,
+            credentials.as_mut_ptr().cast(),
+            &mut size,
+        )
+    };
+    if status != 0 || size as usize != std::mem::size_of::<libc::ucred>() {
+        return None;
+    }
     // SAFETY: the successful call initialized the complete structure.
     Some(unsafe { credentials.assume_init() }.uid)
 }
 
 #[cfg(feature = "flutter")]
 pub(super) fn is_root_client(client: &Client) -> bool {
-    client.get_data::<handlers::DenialClientState>()
+    client
+        .get_data::<handlers::DenialClientState>()
         .is_some_and(|state| state.peer_uid == Some(0))
 }
 

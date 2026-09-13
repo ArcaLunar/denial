@@ -433,6 +433,8 @@ class _SettingsPageBody extends ConsumerWidget {
           onWindowLayoutChanged: controller.setDesktopWindowLayout,
           onWorkspacesEnabledChanged: controller.setWorkspacesEnabled,
           onWorkspaceCountChanged: controller.setWorkspaceCount,
+          onWorkspaceSwitchingOrientationChanged:
+              controller.setWorkspaceSwitchingOrientation,
           onSystemBarChanged: (side, monitorIds) {
             final outputNames = <String>[
               for (final output

@@ -76,7 +76,7 @@ class DenialShell extends ConsumerWidget {
     );
     final appearance = presentation.appearance;
     final startupCursorThemeId = ref
-        .watch(startupEnvironmentProvider)['DENIA_CURSOR_THEME']
+        .watch(startupEnvironmentProvider)['DENIAL_CURSOR_THEME']
         ?.trim();
     final cursorTheme = resolveShellCursorTheme(
       ref.watch(availableShellCursorThemesProvider),

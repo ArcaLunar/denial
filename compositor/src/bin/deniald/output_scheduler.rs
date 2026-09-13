@@ -1516,7 +1516,9 @@ impl OutputScheduler {
             // This is a real DRM completion matched to a submitted frame.
             // Some panels supply a zero timestamp: that disables clock training,
             // not the completion itself. Never substitute a frame callback.
-            events.fingerprint.presented(pipeline.output_id, presented.request.fingerprint_epoch);
+            events
+                .fingerprint
+                .presented(pipeline.output_id, presented.request.fingerprint_epoch);
             let presentation = PresentedOutput {
                 id: scanouts[pipeline.scanout_index].output.id,
                 logical_sequence: presented.request.tick.sequence,

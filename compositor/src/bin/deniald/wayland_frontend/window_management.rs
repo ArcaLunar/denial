@@ -956,6 +956,28 @@ pub(in super::super) fn queue_transient_window_placement(
     );
 }
 
+/// Publishes transient geometry while retaining the layout row's physical
+/// output even when a scrolling tile is mostly or completely off-screen.
+#[cfg(feature = "flutter")]
+pub(in super::super) fn queue_transient_window_placement_for_monitor(
+    state: &mut RuntimeState,
+    window: &Window,
+    geometry: Rectangle<i32, Logical>,
+    monitor_geometry: Rectangle<i32, Logical>,
+    phase: WindowPlacementPhase,
+    change: WindowPlacementChange,
+) {
+    queue_window_placement_for_monitor_with_persistence(
+        state,
+        window,
+        geometry,
+        monitor_geometry,
+        phase,
+        change,
+        false,
+    );
+}
+
 #[cfg(feature = "flutter")]
 pub(super) fn queue_window_placement_for_monitor(
     state: &mut RuntimeState,
@@ -1246,6 +1268,42 @@ fn queue_local_window_action(state: &mut RuntimeState, window_id: u64, action: W
         .pending_window_events
         .push(PendingWindowEvent::Action(window_id, action));
     state.scene_sync.mark_dirty();
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn toggle_always_on_top_focused_toplevel(state: &mut RuntimeState) -> bool {
+    let local_window_id = focused_local_window(state);
+    let client_window = local_window_id
+        .is_none()
+        .then(|| focused_window(state))
+        .flatten();
+    let window_id = local_window_id.or_else(|| {
+        let frontend = state.wayland.as_ref()?;
+        let root = frontend.window_root_surface(client_window.as_ref()?)?;
+        frontend.surface_id(&root)
+    });
+    let Some(window_id) = window_id else {
+        return false;
+    };
+
+    let pinned = {
+        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        if frontend.pinned_windows.remove(&window_id) {
+            false
+        } else {
+            frontend.pinned_windows.insert(window_id);
+            true
+        }
+    };
+    if pinned && let Some(window) = client_window {
+        state
+            .wayland
+            .as_mut()
+            .expect("missing Wayland frontend")
+            .raise_window(&window, true);
+    }
+    state.scene_sync.mark_dirty();
+    true
 }
 
 #[cfg(feature = "flutter")]

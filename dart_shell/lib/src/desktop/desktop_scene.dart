@@ -279,6 +279,7 @@ List<Widget> _buildDesktopWindowLayers({
   required DisplayLayout? displayLayout,
   required double devicePixelRatio,
   required ValueChanged<DenialWindow> onActivateWindow,
+  required ValueChanged<DenialWindow> onCloseWindow,
   required ValueChanged<DenialWindow> onBeginOverviewDrag,
   required void Function(DenialWindow window, Offset delta)
   onUpdateOverviewDrag,
@@ -405,6 +406,7 @@ List<Widget> _buildDesktopWindowLayers({
         motionDuration: motionDuration,
         active: active,
         onOverviewTap: () => onActivateWindow(window),
+        onOverviewClose: () => onCloseWindow(window),
         onOverviewDragStart: () => onBeginOverviewDrag(window),
         onOverviewDragUpdate: (delta) => onUpdateOverviewDrag(window, delta),
         onOverviewDragEnd: () => onEndOverviewDrag(window),
@@ -461,6 +463,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.onLaunchApp,
     required this.onLaunchLocalApp,
     required this.onActivateWindow,
+    required this.onCloseWindow,
     required this.onOverviewBarrierTap,
     required this.onBeginOverviewDrag,
     required this.onUpdateOverviewDrag,
@@ -497,6 +500,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final ValueChanged<DesktopApp> onLaunchApp;
   final ValueChanged<LocalFlutterApplication> onLaunchLocalApp;
   final ValueChanged<DenialWindow> onActivateWindow;
+  final ValueChanged<DenialWindow> onCloseWindow;
   final ValueChanged<Offset> onOverviewBarrierTap;
   final ValueChanged<DenialWindow> onBeginOverviewDrag;
   final void Function(DenialWindow window, Offset delta) onUpdateOverviewDrag;
@@ -778,6 +782,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final onOpenAppVolumeManager = widget.onOpenAppVolumeManager;
     final onCancelPanelClose = widget.onCancelPanelClose;
     final onSchedulePanelClose = widget.onSchedulePanelClose;
+    final onCloseWindow = widget.onCloseWindow;
     final onLaunchApp = widget.onLaunchApp;
     final onLaunchLocalApp = widget.onLaunchLocalApp;
     final onActivateWindow = widget.onActivateWindow;
@@ -890,6 +895,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     displayLayout: displayLayout,
                     devicePixelRatio: devicePixelRatio,
                     onActivateWindow: onActivateWindow,
+                    onCloseWindow: onCloseWindow,
                     onBeginOverviewDrag: onBeginOverviewDrag,
                     onUpdateOverviewDrag: onUpdateOverviewDrag,
                     onEndOverviewDrag: onEndOverviewDrag,
@@ -946,6 +952,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     displayLayout: displayLayout,
                     devicePixelRatio: devicePixelRatio,
                     onActivateWindow: onActivateWindow,
+                    onCloseWindow: onCloseWindow,
                     onBeginOverviewDrag: onBeginOverviewDrag,
                     onUpdateOverviewDrag: onUpdateOverviewDrag,
                     onEndOverviewDrag: onEndOverviewDrag,

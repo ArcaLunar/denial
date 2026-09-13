@@ -442,6 +442,8 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             shell_fullscreen_locks: HashSet::new(),
             #[cfg(feature = "flutter")]
+            pinned_windows: HashSet::new(),
+            #[cfg(feature = "flutter")]
             visible_window_ids: HashSet::new(),
             #[cfg(feature = "flutter")]
             input_root_ids: HashMap::new(),
@@ -551,7 +553,8 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             frame_timeline,
             #[cfg(feature = "flutter")]
-            mobile_shell: std::env::var("DENIA_SHELL_PROFILE").as_deref() == Ok("mobile"),
+            mobile_shell: denial_core::environment::var("DENIAL_SHELL_PROFILE").as_deref()
+                == Ok("mobile"),
             #[cfg(feature = "flutter")]
             idle_inhibitors,
             #[cfg(feature = "flutter")]

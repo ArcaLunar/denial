@@ -1,5 +1,6 @@
 import 'package:denial_dart_shell/src/desktop/desktop_shell.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
+import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/widgets/desktop_window_reveal.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,6 +34,7 @@ void main() {
           child: DesktopWorkspaceWindowTransition(
             placement: placement,
             transition: activeTransition,
+            orientation: WorkspaceSwitchingOrientation.horizontal,
             outputRect: const Rect.fromLTWH(0, 0, 1920, 1080),
             duration: Duration.zero,
             child: _MountProbe(onMount: () => mounts++),

@@ -49,6 +49,7 @@ pub(in crate::flutter_runtime) struct FlutterGlHandler {
     generation: u64,
     desktop_size: PixelSize,
     producer: ProducerArbiter,
+    shutdown_started: AtomicBool,
 }
 
 impl FlutterGlHandler {
@@ -508,6 +509,7 @@ impl FlutterGlHandler {
             generation,
             desktop_size,
             producer: ProducerArbiter::new(),
+            shutdown_started: AtomicBool::new(false),
         }))
     }
 
@@ -970,12 +972,12 @@ impl FlutterGlHandler {
         true
     }
 
-    pub(in crate::flutter_runtime) fn destroy_targets(&self) {
+    pub(in crate::flutter_runtime) fn destroy_targets(&self) -> bool {
         let mut targets = lock(&self.targets);
         let mut shader_blit = lock(&self.shader_blit);
         let mut depth_stencils = lock(&self.depth_stencils);
         if targets.is_empty() && shader_blit.is_none() && depth_stencils.is_empty() {
-            return;
+            return true;
         }
         let mut context = lock(&self.render_context);
         // SAFETY: either no engine has received this handler, or EngineHost
@@ -983,7 +985,7 @@ impl FlutterGlHandler {
         // callback-state Arc, preventing the final handler drop and cleanup.
         if let Err(error) = unsafe { context.context.make_current() } {
             error!(%error, "could not bind Flutter context for output-target cleanup");
-            return;
+            return false;
         }
         context.owner = Some(thread::current().id());
         let cached_dmabufs = lock(&self.dmabuf_texture_cache).drain();
@@ -996,7 +998,7 @@ impl FlutterGlHandler {
         destroy_shader_blit(self.gl, &mut shader_blit);
         destroy_targets(self.gl, &self.display, &mut targets);
         destroy_depth_stencils(self.gl, &mut depth_stencils);
-        let _ = context.clear_current();
+        context.clear_current()
     }
 
     pub(in crate::flutter_runtime) fn destroy_retired_external_bindings(&self) {
@@ -1145,7 +1147,7 @@ impl Drop for FlutterGlHandler {
     fn drop(&mut self) {
         // Also covers abandoned preparations and startup failures. Successful
         // runtime shutdown already drains the targets; cleanup is idempotent.
-        self.destroy_targets();
+        let _ = self.destroy_targets();
     }
 }
 

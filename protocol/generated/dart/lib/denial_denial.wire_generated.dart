@@ -548,7 +548,8 @@ enum ShortcutActionKind {
   MoveToWorkspace6(49),
   MoveToWorkspace7(50),
   MoveToWorkspace8(51),
-  MoveToWorkspace9(52);
+  MoveToWorkspace9(52),
+  ToggleWindowAlwaysOnTop(53);
 
   final int value;
   const ShortcutActionKind(this.value);
@@ -608,6 +609,7 @@ enum ShortcutActionKind {
       case 50: return ShortcutActionKind.MoveToWorkspace7;
       case 51: return ShortcutActionKind.MoveToWorkspace8;
       case 52: return ShortcutActionKind.MoveToWorkspace9;
+      case 53: return ShortcutActionKind.ToggleWindowAlwaysOnTop;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -616,7 +618,7 @@ enum ShortcutActionKind {
       value == null ? null : ShortcutActionKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 52;
+  static const int maxValue = 53;
   static const fb.Reader<ShortcutActionKind> reader = _ShortcutActionKindReader();
 }
 

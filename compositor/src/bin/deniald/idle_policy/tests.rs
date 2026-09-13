@@ -401,9 +401,26 @@ fn hardware_wake_is_one_way_targets_one_output_and_resets_idle() {
     policy.blank_now([(output(1), true), (output(2), true)]);
     policy.note_external_power_request(output(1), false);
     let request = policy.wake_output_now(output(1), now + Duration::from_secs(2));
-    assert_eq!(request, IdlePowerRequest { output: output(1), powered: true });
+    assert_eq!(
+        request,
+        IdlePowerRequest {
+            output: output(1),
+            powered: true
+        }
+    );
     assert!(policy.blanked_outputs.contains(&output(2)));
-    assert_eq!(policy.wake_output_now(output(1), now + Duration::from_secs(2)), request);
-    assert!(policy.evaluate(now + Duration::from_millis(2500), false,
-        [(output(1), true), (output(2), false)]).power_requests.is_empty());
+    assert_eq!(
+        policy.wake_output_now(output(1), now + Duration::from_secs(2)),
+        request
+    );
+    assert!(
+        policy
+            .evaluate(
+                now + Duration::from_millis(2500),
+                false,
+                [(output(1), true), (output(2), false)]
+            )
+            .power_requests
+            .is_empty()
+    );
 }

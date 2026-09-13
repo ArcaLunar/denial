@@ -32,6 +32,8 @@ class NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
+    final mobileMetrics = MobileUiMetrics.of(context);
+    final visual = mobileMetrics.visual;
     final l10n = context.l10n;
     final appName = notificationAppName(notification, l10n);
     final fullPreview = previewMode == NotificationPreviewMode.full;
@@ -58,7 +60,9 @@ class NotificationCard extends StatelessWidget {
     final banner = !compact && !mobile;
 
     final panelSurface = banner || mobile;
-    final radius = BorderRadius.circular(theme.panelRadius);
+    final radius = BorderRadius.circular(
+      mobile ? visual(theme.panelRadius) : theme.panelRadius,
+    );
     final copy = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -81,22 +85,43 @@ class NotificationCard extends StatelessWidget {
           expanded: expanded,
         ),
         if (fullPreview && notification.hasProgress) ...[
-          const SizedBox(height: 11),
-          _NotificationProgress(value: notification.progress),
+          SizedBox(
+            height: mobile
+                ? visual(MobileNotificationMetrics.sectionSpacing)
+                : 11,
+          ),
+          _NotificationProgress(
+            value: notification.progress,
+            visualScale: mobile ? visual(1) : 1,
+          ),
         ],
         if (showActions && namedActions.isNotEmpty && onAction != null) ...[
-          const SizedBox(height: 11),
           SizedBox(
-            height: mobile ? 48 : 34,
+            height: mobile
+                ? visual(MobileNotificationMetrics.sectionSpacing)
+                : 11,
+          ),
+          SizedBox(
+            height: mobile
+                ? visual(MobileNotificationMetrics.actionHeight)
+                : 34,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: namedActions.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 7),
+              separatorBuilder: (_, _) => SizedBox(
+                width: mobile
+                    ? visual(MobileNotificationMetrics.actionSpacing)
+                    : 7,
+              ),
               itemBuilder: (context, index) {
                 final action = namedActions[index];
                 return _NotificationActionButton(
                   label: action.label.isEmpty ? action.key : action.label,
-                  fontSize: mobile ? 17 : 12,
+                  mobile: mobile,
+                  fontSize: mobile
+                      ? MobileNotificationMetrics.actionFontSize
+                      : 12,
+                  visualScale: mobile ? visual(1) : 1,
                   textColor: mobile ? context.shellColors.textPrimary : null,
                   onPressed: () => onAction!(action.key),
                 );
@@ -119,34 +144,44 @@ class NotificationCard extends StatelessWidget {
               )
             : null,
         borderRadius: radius,
-        border: Border.all(
-          color: panelSurface
-              ? context.shellColors.hairline
-              : context.shellColors.hairlineSoft,
-        ),
+        border: mobile && theme.transparencyMode == ShellTransparencyMode.glass
+            ? null
+            : Border.all(
+                color: panelSurface
+                    ? context.shellColors.hairline
+                    : context.shellColors.hairlineSoft,
+              ),
       ),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          mobile ? 20 : (compact ? 12 : 14),
-          mobile ? 20 : (compact ? 11 : 13),
-          mobile ? 20 : (compact ? 10 : 12),
-          mobile ? 20 : (compact ? 12 : 14),
-        ),
+        padding: mobile
+            ? mobileMetrics.visualInsets(
+                left: MobileNotificationMetrics.horizontalContentInset,
+                top: MobileNotificationMetrics.verticalContentInset,
+                right: MobileNotificationMetrics.horizontalContentInset,
+                bottom: MobileNotificationMetrics.verticalContentInset,
+              )
+            : EdgeInsets.fromLTRB(
+                compact ? 12 : 14,
+                compact ? 11 : 13,
+                compact ? 10 : 12,
+                compact ? 12 : 14,
+              ),
         child: mobile
             ? Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   NotificationArtwork(
                     notification: notification,
-                    size: 56,
-                    preferContentImage: false,
+                    size: visual(MobileNotificationMetrics.leadingArtwork),
+                    preferContentImage: fullPreview,
                   ),
-                  const SizedBox(width: 14),
+                  SizedBox(width: visual(MobileNotificationMetrics.leadingGap)),
                   Expanded(child: copy),
                   if (onDismiss != null)
                     _NotificationIconButton(
                       label: l10n.notificationDismiss,
                       icon: Icons.close_rounded,
+                      visualScale: visual(1),
                       onPressed: onDismiss!,
                     ),
                 ],
@@ -182,6 +217,7 @@ class NotificationCard extends StatelessWidget {
           ? _NotificationActivator(
               semanticLabel: l10n.notificationOpen(summary),
               onActivate: onDefaultAction!,
+              borderRadius: radius,
               child: content,
             )
           : content,
@@ -274,6 +310,7 @@ class _NotificationBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visual = MobileUiMetrics.of(context).visual;
     final copy = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -284,14 +321,18 @@ class _NotificationBody extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: ShellText.cardTitle.copyWith(
             color: mobile ? context.shellColors.textPrimary : null,
-            fontSize: mobile ? 20 : (compact ? 13.5 : 14.5),
+            fontSize: mobile
+                ? MobileNotificationMetrics.titleFontSize
+                : (compact ? 13.5 : 14.5),
             fontWeight: mobile ? FontWeight.w700 : FontWeight.w600,
             height: 1.2,
             letterSpacing: 0,
           ),
         ),
         if (body.isNotEmpty) ...[
-          const SizedBox(height: 4),
+          SizedBox(
+            height: mobile ? visual(MobileNotificationMetrics.copySpacing) : 4,
+          ),
           Text(
             body,
             maxLines: expanded ? null : (mobile || compact ? 2 : 3),
@@ -300,7 +341,9 @@ class _NotificationBody extends StatelessWidget {
               color: mobile
                   ? context.shellColors.textPrimary
                   : context.shellColors.textSecondary,
-              fontSize: mobile ? 18 : (compact ? 12 : 12.5),
+              fontSize: mobile
+                  ? MobileNotificationMetrics.bodyFontSize
+                  : (compact ? 12 : 12.5),
               fontWeight: FontWeight.w400,
               height: 1.34,
             ),
@@ -311,29 +354,28 @@ class _NotificationBody extends StatelessWidget {
     final hasImage =
         fullPreview &&
         (notification.imageData != null || notification.imagePath.isNotEmpty);
-    if (!hasImage) {
+    if (!hasImage || mobile) {
       return copy;
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (mobile) Expanded(child: copy),
-        if (mobile) const SizedBox(width: 12),
         NotificationArtwork(
           notification: notification,
-          size: mobile ? 48 : (compact ? 58 : 68),
+          size: compact ? 58 : 68,
         ),
-        if (!mobile) const SizedBox(width: 11),
-        if (!mobile) Expanded(child: copy),
+        const SizedBox(width: 11),
+        Expanded(child: copy),
       ],
     );
   }
 }
 
 class _NotificationProgress extends StatelessWidget {
-  const _NotificationProgress({required this.value});
+  const _NotificationProgress({required this.value, this.visualScale = 1});
 
   final int value;
+  final double visualScale;
 
   @override
   Widget build(BuildContext context) {
@@ -342,9 +384,9 @@ class _NotificationProgress extends StatelessWidget {
       label: context.l10n.notificationProgress(normalized),
       value: context.l10n.settingsPercent(normalized),
       child: ClipRRect(
-        borderRadius: context.shellTheme.borderRadius(2),
+        borderRadius: context.shellTheme.borderRadius(2 * visualScale),
         child: SizedBox(
-          height: 3,
+          height: MobileNotificationMetrics.progressHeight * visualScale,
           child: Stack(
             fit: StackFit.expand,
             children: [

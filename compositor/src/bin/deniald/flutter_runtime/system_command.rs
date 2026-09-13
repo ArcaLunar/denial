@@ -68,6 +68,7 @@ const APPLICATION_ENVIRONMENT_REMOVALS: &[&str] = &[
     "LISTEN_PID",
     "SYSTEMD_EXEC_PID",
     "DENIAL_NO_RT",
+    "DENIAL_LAUNCH_REQUEST_ID",
     "DENIA_LAUNCH_REQUEST_ID",
     "DENIAL_SOCKET",
     // This is useful for keeping compositor diagnostics machine-readable, but
@@ -741,7 +742,10 @@ fn application_command(
         });
     }
     if let Some(request_id) = launch_request_id {
-        command.env("DENIA_LAUNCH_REQUEST_ID", request_id.get().to_string());
+        let request_id = request_id.get().to_string();
+        command
+            .env("DENIAL_LAUNCH_REQUEST_ID", &request_id)
+            .env("DENIA_LAUNCH_REQUEST_ID", request_id);
     }
     if let Some(token) = activation_token {
         command.env("XDG_ACTIVATION_TOKEN", token);

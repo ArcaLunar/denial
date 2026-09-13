@@ -42,7 +42,9 @@ enum MinimizedWindowPlacement { desktop, offscreen }
 
 /// Compositor geometry policy for ordinary, non-transient desktop windows.
 /// Each value maps to a Rust `WindowLayout` implementation.
-enum DesktopWindowLayout { stacking, dwindle }
+enum DesktopWindowLayout { stacking, dwindle, scrolling }
+
+enum WorkspaceSwitchingOrientation { horizontal, vertical }
 
 const int minimumWorkspaceCount = 2;
 const int maximumWorkspaceCount = 9;
@@ -255,6 +257,8 @@ class ShellLayoutSettings {
     this.windowLayout = DesktopWindowLayout.stacking,
     this.workspacesEnabled = false,
     this.workspaceCount = defaultWorkspaceCount,
+    this.workspaceSwitchingOrientation =
+        WorkspaceSwitchingOrientation.horizontal,
     this.systemBarSide = SystemBarSide.top,
     this.systemBarOutputNames = const <String>[],
     this.systemBarThickness = 33,
@@ -267,6 +271,7 @@ class ShellLayoutSettings {
   final DesktopWindowLayout windowLayout;
   final bool workspacesEnabled;
   final int workspaceCount;
+  final WorkspaceSwitchingOrientation workspaceSwitchingOrientation;
   final SystemBarSide? systemBarSide;
   final List<String> systemBarOutputNames;
   final double systemBarThickness;
@@ -279,6 +284,7 @@ class ShellLayoutSettings {
     DesktopWindowLayout? windowLayout,
     bool? workspacesEnabled,
     int? workspaceCount,
+    WorkspaceSwitchingOrientation? workspaceSwitchingOrientation,
     SystemBarSide? systemBarSide,
     bool clearSystemBarSide = false,
     List<String>? systemBarOutputNames,
@@ -292,6 +298,8 @@ class ShellLayoutSettings {
       windowLayout: windowLayout ?? this.windowLayout,
       workspacesEnabled: workspacesEnabled ?? this.workspacesEnabled,
       workspaceCount: workspaceCount ?? this.workspaceCount,
+      workspaceSwitchingOrientation:
+          workspaceSwitchingOrientation ?? this.workspaceSwitchingOrientation,
       systemBarSide: clearSystemBarSide
           ? null
           : systemBarSide ?? this.systemBarSide,
@@ -313,6 +321,7 @@ class ShellLayoutSettings {
         other.windowLayout == windowLayout &&
         other.workspacesEnabled == workspacesEnabled &&
         other.workspaceCount == workspaceCount &&
+        other.workspaceSwitchingOrientation == workspaceSwitchingOrientation &&
         other.systemBarSide == systemBarSide &&
         listEquals(other.systemBarOutputNames, systemBarOutputNames) &&
         other.systemBarThickness == systemBarThickness &&
@@ -327,6 +336,7 @@ class ShellLayoutSettings {
     windowLayout,
     workspacesEnabled,
     workspaceCount,
+    workspaceSwitchingOrientation,
     systemBarSide,
     Object.hashAll(systemBarOutputNames),
     systemBarThickness,
@@ -802,7 +812,7 @@ class ShellSettings {
 
   // Blur levels are additive in schema 9. Keep emitting the derived legacy
   // sigma so older shells can read settings written by this version.
-  static const int schemaVersion = 24;
+  static const int schemaVersion = 25;
 
   final ShellLocalizationSettings localization;
   final ShellAppearanceSettings appearance;
@@ -926,6 +936,11 @@ class ShellSettings {
       }
       if (layout.workspaceCount != before.workspaceCount) {
         section['workspaceCount'] = layout.workspaceCount;
+      }
+      if (layout.workspaceSwitchingOrientation !=
+          before.workspaceSwitchingOrientation) {
+        section['workspaceSwitchingOrientation'] =
+            layout.workspaceSwitchingOrientation.name;
       }
       if (layout.systemBarSide != before.systemBarSide) {
         section['systemBarSide'] = layout.systemBarSide?.name;
@@ -1076,6 +1091,8 @@ class ShellSettings {
         'windowLayout': layout.windowLayout.name,
         'workspacesEnabled': layout.workspacesEnabled,
         'workspaceCount': layout.workspaceCount,
+        'workspaceSwitchingOrientation':
+            layout.workspaceSwitchingOrientation.name,
         'systemBarSide': layout.systemBarSide?.name,
         'systemBarOutputs': layout.systemBarOutputNames,
         'systemBarThickness': layout.systemBarThickness,
@@ -1307,6 +1324,11 @@ class ShellSettings {
           defaults.layout.workspaceCount,
           minimumWorkspaceCount,
           maximumWorkspaceCount,
+        ),
+        workspaceSwitchingOrientation: _enumValue(
+          WorkspaceSwitchingOrientation.values,
+          layoutJson['workspaceSwitchingOrientation'],
+          defaults.layout.workspaceSwitchingOrientation,
         ),
         systemBarSide: layoutJson.isNotEmpty
             ? _nullableEnumValue(

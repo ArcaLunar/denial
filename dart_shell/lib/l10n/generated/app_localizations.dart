@@ -4138,6 +4138,18 @@ abstract class AppLocalizations {
   /// **'Four-finger swipe right'**
   String get settingsShortcutGestureFourFingerSwipeRight;
 
+  /// Friendly display name for the four-finger swipe-up gesture.
+  ///
+  /// In en, this message translates to:
+  /// **'Four-finger swipe up'**
+  String get settingsShortcutGestureFourFingerSwipeUp;
+
+  /// Friendly display name for the four-finger swipe-down gesture.
+  ///
+  /// In en, this message translates to:
+  /// **'Four-finger swipe down'**
+  String get settingsShortcutGestureFourFingerSwipeDown;
+
   /// Supported shortcut input category.
   ///
   /// In en, this message translates to:
@@ -4275,6 +4287,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Enter or leave fullscreen'**
   String get settingsShortcutActionToggleFullscreen;
+
+  /// Display name for the shortcut action that pins or unpins the focused window above other windows.
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle always on top'**
+  String get settingsShortcutActionToggleWindowAlwaysOnTop;
 
   /// Display name for the release pointer shortcut action.
   ///
@@ -4432,10 +4450,10 @@ abstract class AppLocalizations {
   /// **'Give every window room to breathe.'**
   String get settingsLayoutTitle;
 
-  /// Explains the difference between stacking and tiling window layouts.
+  /// Explains the available desktop window layouts.
   ///
   /// In en, this message translates to:
-  /// **'Stacking lets windows overlap and move freely. Tiling uses a dynamic binary tree while keeping transient windows floating.'**
+  /// **'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling arranges full-height columns in a focus-following horizontal strip.'**
   String get settingsWindowLayoutDescription;
 
   /// Label for the Dwindle tiling window layout.
@@ -4449,6 +4467,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stacking'**
   String get settingsWindowLayoutStacking;
+
+  /// Label for the focus-following horizontal scrolling layout.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrolling'**
+  String get settingsWindowLayoutScrolling;
 
   /// Title for choosing how desktop windows are arranged.
   ///
@@ -4479,6 +4503,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Workspace count'**
   String get settingsWorkspaceCount;
+
+  /// Label for choosing the direction of workspace transition motion.
+  ///
+  /// In en, this message translates to:
+  /// **'Switching direction'**
+  String get settingsWorkspaceSwitchingOrientation;
+
+  /// Label for horizontal workspace transition motion.
+  ///
+  /// In en, this message translates to:
+  /// **'Horizontal'**
+  String get settingsWorkspaceSwitchingHorizontal;
+
+  /// Label for vertical workspace transition motion.
+  ///
+  /// In en, this message translates to:
+  /// **'Vertical'**
+  String get settingsWorkspaceSwitchingVertical;
 
   /// Accessible and visible label for a numbered workspace.
   ///

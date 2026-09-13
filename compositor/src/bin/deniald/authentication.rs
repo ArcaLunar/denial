@@ -775,7 +775,9 @@ impl AuthenticationController {
     pub(super) fn new(start_locked: bool) -> io::Result<Self> {
         let controller = Self::with_backend(default_backend(), start_locked)?;
         match crate::haptics::HapticsClient::new() {
-            Ok(client) => { let _ = controller.shared.haptics.set(client); }
+            Ok(client) => {
+                let _ = controller.shared.haptics.set(client);
+            }
             Err(error) => warn!(%error, "could not start optional haptics worker"),
         }
         let shared = Arc::clone(&controller.shared);
@@ -839,7 +841,9 @@ impl AuthenticationController {
     pub(super) fn handle_haptics_packet(&self, packet: &[u8]) -> Result<(), &'static str> {
         if let Some(client) = self.shared.haptics.get() {
             client.handle_packet(packet)
-        } else { Ok(()) }
+        } else {
+            Ok(())
+        }
     }
 
     pub(super) fn locked(&self) -> bool {

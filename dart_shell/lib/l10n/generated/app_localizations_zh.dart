@@ -2225,6 +2225,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsShortcutGestureFourFingerSwipeRight => '四指向右轻扫';
 
   @override
+  String get settingsShortcutGestureFourFingerSwipeUp => '四指向上轻扫';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeDown => '四指向下轻扫';
+
+  @override
   String get settingsShortcutInputCategoryModifier => '修饰键';
 
   @override
@@ -2292,6 +2298,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsShortcutActionToggleFullscreen => '进入或退出全屏';
+
+  @override
+  String get settingsShortcutActionToggleWindowAlwaysOnTop => '置顶或取消置顶窗口';
 
   @override
   String get settingsShortcutActionReleasePointer => '释放指针';
@@ -2379,13 +2388,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWindowLayoutDescription =>
-      '堆叠允许窗口自由移动和重叠。平铺使用动态二叉树排列窗口，并让临时窗口保持浮动。';
+      '堆叠允许窗口相互重叠。平铺动态划分桌面。滚动平铺将全高窗口列排列成跟随焦点的水平长带。';
 
   @override
   String get settingsWindowLayoutDwindle => '平铺';
 
   @override
   String get settingsWindowLayoutStacking => '堆叠';
+
+  @override
+  String get settingsWindowLayoutScrolling => '滚动平铺';
 
   @override
   String get settingsWindowLayoutTitle => '窗口布局';
@@ -2402,6 +2414,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWorkspaceCount => 'Workspace count';
+
+  @override
+  String get settingsWorkspaceSwitchingOrientation => '切换方向';
+
+  @override
+  String get settingsWorkspaceSwitchingHorizontal => '水平';
+
+  @override
+  String get settingsWorkspaceSwitchingVertical => '垂直';
 
   @override
   String workspaceLabel(int workspace) {

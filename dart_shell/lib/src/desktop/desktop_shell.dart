@@ -866,12 +866,12 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     );
     final windowSwitcher = ref.watch(desktopWindowSwitcherProvider);
     final nativeDisplayLayout = ref.watch(displayLayoutProvider);
-    // DENIA_SHELL_DEV_LAYOUT lets the shell run as an ordinary Wayland client
+    // DENIAL_SHELL_DEV_LAYOUT lets the shell run as an ordinary Wayland client
     // (no native bridge) while still rendering layout-dependent chrome such
     // as the system bar, for styling work without restarting deniald.
     final displayLayout =
         nativeDisplayLayout ??
-        (ref.watch(startupEnvironmentProvider).flag('DENIA_SHELL_DEV_LAYOUT')
+        (ref.watch(startupEnvironmentProvider).flag('DENIAL_SHELL_DEV_LAYOUT')
             ? DisplayLayout.fallback(
                 MediaQuery.sizeOf(context),
                 MediaQuery.devicePixelRatioOf(context),
@@ -917,6 +917,9 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             onLaunchApp: _launchApp,
             onLaunchLocalApp: _launchLocalApp,
             onActivateWindow: _activateWindow,
+            onCloseWindow: ref
+                .read(shellControllerProvider.notifier)
+                .closeWindow,
             onOverviewBarrierTap: _handleOverviewBarrierTap,
             onBeginOverviewDrag: _beginOverviewDrag,
             onUpdateOverviewDrag: _updateOverviewDrag,

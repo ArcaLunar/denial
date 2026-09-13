@@ -11,11 +11,11 @@ mod cpu_scheduling;
 #[cfg(feature = "flutter")]
 #[path = "deniald/dpms.rs"]
 mod dpms;
+#[path = "deniald/egl_context.rs"]
+mod egl_context;
 #[cfg(feature = "flutter")]
 #[path = "deniald/fingerprint_presentation.rs"]
 mod fingerprint_presentation;
-#[path = "deniald/egl_context.rs"]
-mod egl_context;
 #[cfg(feature = "flutter")]
 #[path = "deniald/flutter_event_loop.rs"]
 mod flutter_event_loop;
@@ -203,10 +203,10 @@ use flutter_service_sync::{
 };
 #[cfg(feature = "flutter")]
 use flutter_session::{
-    ActiveOutputConfirmation, begin_output_confirmation, cancel_active_screenshot,
-    install_ready_fence_watch, install_sampled_buffer_releases, quiesce_flutter_page_flips,
-    reload_flutter_runtime, screenshot_buffer_modifier, screenshot_composite_sources,
-    submit_ready_frames,
+    ActiveOutputConfirmation, FlutterReloadOutcome, begin_output_confirmation,
+    cancel_active_screenshot, install_ready_fence_watch, install_sampled_buffer_releases,
+    quiesce_flutter_page_flips, reload_flutter_runtime, screenshot_buffer_modifier,
+    screenshot_composite_sources, submit_ready_frames,
 };
 #[cfg(feature = "flutter")]
 use flutter_settings_sync::{
@@ -317,17 +317,7 @@ const MAX_FLUTTER_EVENTS_PER_ITERATION: usize = 128;
 #[cfg(feature = "flutter")]
 fn render_audit_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| {
-        matches!(
-            std::env::var("DENIA_RENDER_AUDIT")
-                .ok()
-                .as_deref()
-                .map(str::trim)
-                .map(str::to_ascii_lowercase)
-                .as_deref(),
-            Some("1" | "true" | "yes" | "on")
-        )
-    })
+    *ENABLED.get_or_init(|| denial_core::environment::flag("DENIAL_RENDER_AUDIT"))
 }
 
 fn main() {
@@ -355,6 +345,7 @@ fn main() {
 }
 
 fn denial_main() -> Result<(), Box<dyn Error>> {
+    install_legacy_denial_environment_aliases();
     let options = Options::parse()?;
     if options.start_locked {
         // SAFETY: option parsing happens on the process's only thread, before
@@ -362,6 +353,7 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
         // Dart reads this once to make its very first visual state match the
         // already-locked native security gate.
         unsafe {
+            std::env::set_var("DENIAL_START_LOCKED", "1");
             std::env::set_var("DENIA_START_LOCKED", "1");
         }
     }
@@ -388,4 +380,21 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
         }
     }
     run(options)
+}
+
+fn install_legacy_denial_environment_aliases() {
+    let aliases = std::env::vars_os()
+        .filter_map(|(name, value)| {
+            let suffix = name.to_str()?.strip_prefix("DENIAL_")?;
+            Some((format!("DENIA_{suffix}"), value))
+        })
+        .collect::<Vec<_>>();
+    // SAFETY: denial_main calls this before option parsing starts libseat,
+    // Flutter, graphics drivers, or any worker thread. Canonical values win
+    // so the pinned engine's legacy getenv calls observe the same setting.
+    unsafe {
+        for (legacy, value) in aliases {
+            std::env::set_var(legacy, value);
+        }
+    }
 }

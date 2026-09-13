@@ -243,8 +243,11 @@ pub(super) fn run_worker(
 }
 
 fn fingerprint_retry(failures: u32) -> Duration {
-    if failures <= 4 { Duration::from_millis(150) }
-    else { cooldown_for(failures - 4) }
+    if failures <= 4 {
+        Duration::from_millis(150)
+    } else {
+        cooldown_for(failures - 4)
+    }
 }
 
 fn unavailable_retry(attempts: u32) -> Duration {
@@ -396,7 +399,10 @@ mod tests {
         assert_eq!(event.kind, AuthenticationEventKind::FingerprintFeedback);
         assert_eq!(event.encode()[6], KIND_FINGERPRINT_FEEDBACK);
         assert_eq!(event.message, "no-match");
-        assert_eq!(requests.try_recv().unwrap().kind, crate::haptics::Kind::FingerprintRejected);
+        assert_eq!(
+            requests.try_recv().unwrap().kind,
+            crate::haptics::Kind::FingerprintRejected
+        );
         assert!(controller.locked());
         let state = lock_unpoisoned(&controller.shared.state);
         assert_eq!((state.generation, state.busy, state.failure_count), before);

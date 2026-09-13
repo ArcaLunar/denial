@@ -436,7 +436,12 @@ pub(super) fn run_flutter_event_loop(
             )?;
         }
         if !scanout_rebased {
-            let (changed, power) = events.fingerprint.service(drm, renderer, scanouts, flutter.as_mut().ok_or("fingerprint requires Flutter")?)?;
+            let (changed, power) = events.fingerprint.service(
+                drm,
+                renderer,
+                scanouts,
+                flutter.as_mut().ok_or("fingerprint requires Flutter")?,
+            )?;
             for (output, powered) in power {
                 events.output_power_requests.insert(output, powered);
             }
@@ -1447,7 +1452,13 @@ pub(super) fn run_flutter_event_loop(
                 true,
                 "Flutter runtime is refreshing",
             )?;
-            if scheduler.has_pending_scanout_work() {
+            let scanout_work_pending = scheduler.has_pending_scanout_work();
+            let resident_targets_idle = flutter.as_ref().is_some_and(|runtime| {
+                scanouts
+                    .iter()
+                    .all(|scanout| runtime.output_target_available(scanout.output.id))
+            });
+            if scanout_work_pending || !resident_targets_idle {
                 // Stop servicing the producer while its last output batch reaches
                 // every affected CRTC. A ready fence or page flip will wake
                 // this loop through calloop, without disturbing clients or
@@ -1470,9 +1481,7 @@ pub(super) fn run_flutter_event_loop(
             }
 
             scheduler.prepare_reconfiguration(scanouts, &mut events)?;
-            retired_output_flips =
-                retired_output_flips.saturating_add(scheduler.presented_frames());
-            reload_flutter_runtime(
+            let reload = reload_flutter_runtime(
                 renderer,
                 swapchain,
                 scanouts,
@@ -1481,24 +1490,37 @@ pub(super) fn run_flutter_event_loop(
                 flutter,
                 flutter_launcher,
             )?;
-            scheduler = output_scheduler::OutputScheduler::new(
-                drm,
-                volition_event_sender.clone(),
-                scanouts,
-                swapchain
-                    .outputs()
-                    .ok_or("output scheduler has no physical output pools")?,
-                flutter
-                    .as_mut()
-                    .ok_or("Flutter runtime was not restarted after bundle refresh")?,
-                &mut events,
-            )?;
-            frame_scheduler = frame_scheduler::FrameScheduler::new(scanouts, Instant::now());
             events.flutter_reload_requested = false;
-            info!(
-                generation = flutter_launcher.generation,
-                "refreshed Flutter bundle without restarting the compositor session"
-            );
+            match reload {
+                FlutterReloadOutcome::Replaced => {
+                    retired_output_flips =
+                        retired_output_flips.saturating_add(scheduler.presented_frames());
+                    scheduler = output_scheduler::OutputScheduler::new(
+                        drm,
+                        volition_event_sender.clone(),
+                        scanouts,
+                        swapchain
+                            .outputs()
+                            .ok_or("output scheduler has no physical output pools")?,
+                        flutter
+                            .as_mut()
+                            .ok_or("Flutter runtime was not restarted after bundle refresh")?,
+                        &mut events,
+                    )?;
+                    frame_scheduler =
+                        frame_scheduler::FrameScheduler::new(scanouts, Instant::now());
+                    info!(
+                        generation = flutter_launcher.generation,
+                        "refreshed Flutter bundle without restarting the compositor session"
+                    );
+                }
+                FlutterReloadOutcome::Retained => {
+                    info!(
+                        generation = flutter_launcher.generation,
+                        "retained the active Flutter bundle after refresh preflight rejection"
+                    );
+                }
+            }
             continue;
         }
 

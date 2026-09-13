@@ -382,7 +382,10 @@ impl IdlePolicy {
         self.reset_idle_interval(now);
         self.blanked_outputs.remove(&output);
         self.manually_blanked &= !self.blanked_outputs.is_empty();
-        IdlePowerRequest { output, powered: true }
+        IdlePowerRequest {
+            output,
+            powered: true,
+        }
     }
 
     pub(super) fn note_activity(&mut self, now: Instant) -> Vec<IdlePowerRequest> {

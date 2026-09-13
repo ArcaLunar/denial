@@ -168,7 +168,8 @@ enum ShortcutActionKind : ubyte {
   MoveToWorkspace6 = 49,
   MoveToWorkspace7 = 50,
   MoveToWorkspace8 = 51,
-  MoveToWorkspace9 = 52
+  MoveToWorkspace9 = 52,
+  ToggleWindowAlwaysOnTop = 53
 }
 
 enum ShortcutInputKind : ubyte {

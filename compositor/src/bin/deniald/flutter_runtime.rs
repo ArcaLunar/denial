@@ -53,10 +53,10 @@ use super::idle_policy;
 use super::render_audit_enabled;
 use super::wire::{self, WireBridge};
 
-#[path = "flutter_runtime/lock_frame.rs"]
-mod lock_frame;
 #[path = "flutter_runtime/fingerprint_scene.rs"]
 mod fingerprint_scene;
+#[path = "flutter_runtime/lock_frame.rs"]
+mod lock_frame;
 #[path = "flutter_runtime/mouse_cursor.rs"]
 mod mouse_cursor;
 #[path = "flutter_runtime/platform.rs"]

@@ -544,6 +544,7 @@ pub struct WindowDescription {
     pub monitor_id: i64,
     pub workspace_id: i64,
     pub minimized: bool,
+    pub pinned: bool,
     pub transform: u32,
     pub scale_120: u32,
     pub content_x: f64,
