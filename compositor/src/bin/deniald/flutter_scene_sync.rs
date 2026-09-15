@@ -218,7 +218,11 @@ pub(super) fn synchronize_wayland_cursor(
             .as_mut()
             .expect("cursor publication has no Wayland frontend")
             .flutter_cursor_state(publication);
-        if let Err(error) = wire::validate_cursor_state(&state) {
+        // FlutterRuntime assigns the monotonic cursor epoch only after it has
+        // installed the associated texture set. Validate the compositor-owned
+        // payload here without rejecting that intentionally unassigned epoch;
+        // the wire encoder validates the complete state again after assignment.
+        if let Err(error) = wire::validate_cursor_state_payload(&state) {
             warn!(
                 %error,
                 kind = ?state.kind,

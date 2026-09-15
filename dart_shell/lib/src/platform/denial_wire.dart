@@ -1418,6 +1418,8 @@ class DenialWireCodec {
           monitorId: window.monitorId,
           workspaceId: window.workspaceId,
           minimized: window.minimized,
+          fullscreen: window.fullscreen,
+          maximized: window.maximized,
           transform: window.transform,
           scale120: window.scale120,
           pinned: window.pinned,

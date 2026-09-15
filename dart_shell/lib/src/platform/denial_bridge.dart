@@ -2859,6 +2859,7 @@ class DenialBridge {
       final action = switch (event.action) {
         wire.WindowActionKind.Minimize => DenialWindowAction.minimize,
         wire.WindowActionKind.Maximize => DenialWindowAction.maximize,
+        wire.WindowActionKind.Fullscreen => DenialWindowAction.fullscreen,
         wire.WindowActionKind.Restore => DenialWindowAction.restore,
         wire.WindowActionKind.ToggleMaximize =>
           DenialWindowAction.toggleMaximize,

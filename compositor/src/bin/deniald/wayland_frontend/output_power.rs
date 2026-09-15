@@ -134,6 +134,9 @@ impl WaylandFrontend {
         if !powered {
             self.fail_screencopies_for_output(output);
         }
+        if changed {
+            self.refresh_image_copy_constraints();
+        }
         if let Some(resource) = self.output_power.controllers.get(&output) {
             resource.mode(if powered {
                 zwlr_output_power_v1::Mode::On

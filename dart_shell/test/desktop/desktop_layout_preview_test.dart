@@ -32,6 +32,34 @@ const testWindow = DenialWindow(
   scale120: 120,
 );
 
+const testWindowOnSecondWorkspace = DenialWindow(
+  objectId: 7,
+  objectKind: 'xdg',
+  surfaceId: 17,
+  windowId: 27,
+  textureId: 37,
+  title: 'Test',
+  appId: 'test.app',
+  width: 300,
+  height: 200,
+  surfaceX: 0,
+  surfaceY: 0,
+  surfaceWidth: 300,
+  surfaceHeight: 200,
+  textureSourceX: 0,
+  textureSourceY: 0,
+  textureSourceWidth: 300,
+  textureSourceHeight: 200,
+  geometryX: 10,
+  geometryY: 20,
+  geometryWidth: 300,
+  geometryHeight: 200,
+  monitorId: 2,
+  workspaceId: 2,
+  transform: 0,
+  scale120: 120,
+);
+
 const testWindowBeforeScaleChange = DenialWindow(
   objectId: 8,
   objectKind: 'xdg',
@@ -177,4 +205,61 @@ void main() {
       expect(restored.dragging, isFalse);
     },
   );
+
+  test('overtaking metadata cannot discard geometry or revert ownership', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final workspace = container.read(desktopWorkspaceProvider.notifier);
+    workspace.syncWindows(
+      const [testWindow],
+      const Size(1200, 800),
+      1,
+      snapshotSequence: 1,
+    );
+
+    expect(
+      workspace.applyNativePlacement(
+        7,
+        const DenialWindowPlacementEvent(
+          sequence: 2,
+          windowId: 27,
+          contentRect: Rect.fromLTWH(110, 20, 300, 200),
+          monitorId: 1,
+          workspaceId: 1,
+          phase: DenialWindowPlacementPhase.update,
+          change: DenialWindowPlacementChange.move,
+        ),
+      ),
+      isTrue,
+    );
+
+    // Flutter may receive a newer scene snapshot before the batched next
+    // placement is reduced. Because live movement owns geometry, this
+    // snapshot must not make that ordered placement stale.
+    workspace.syncWindows(
+      const [testWindowOnSecondWorkspace],
+      const Size(1200, 800),
+      1,
+      snapshotSequence: 4,
+    );
+    expect(
+      workspace.applyNativePlacement(
+        7,
+        const DenialWindowPlacementEvent(
+          sequence: 3,
+          windowId: 27,
+          contentRect: Rect.fromLTWH(210, 20, 300, 200),
+          monitorId: 1,
+          workspaceId: 1,
+          phase: DenialWindowPlacementPhase.update,
+          change: DenialWindowPlacementChange.move,
+        ),
+      ),
+      isTrue,
+    );
+    final placement = container.read(desktopWorkspaceProvider).placements[7]!;
+    expect(placement.contentRect, const Rect.fromLTWH(210, 20, 300, 200));
+    expect(placement.monitorId, 2);
+    expect(placement.workspaceId, 2);
+  });
 }

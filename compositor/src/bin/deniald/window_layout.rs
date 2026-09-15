@@ -12,6 +12,24 @@ use std::fmt::Debug;
 use denial_core::topology::OutputId;
 use smithay::utils::{Logical, Point, Rectangle, Size};
 
+/// The single ownership identity for a managed layout leaf.
+///
+/// Physical output and virtual workspace used to be folded into a synthetic
+/// `OutputId`, while the frontend independently cached the same information.
+/// Keeping the pair explicit lets every layout mutation expose and reconcile
+/// its authoritative ownership without decoding geometry or duplicating state.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(super) struct LayoutSpace {
+    pub(super) output: OutputId,
+    pub(super) workspace: u8,
+}
+
+impl LayoutSpace {
+    pub(super) const fn new(output: OutputId, workspace: u8) -> Self {
+        Self { output, workspace }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) enum WindowLayoutKind {
     #[default]
@@ -42,7 +60,7 @@ impl WindowLayoutKind {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct LayoutInsertion<WindowId> {
     pub(super) window: WindowId,
-    pub(super) output: OutputId,
+    pub(super) space: LayoutSpace,
     /// The focused window on the destination output, when one is available.
     pub(super) anchor: Option<WindowId>,
 }
@@ -144,6 +162,7 @@ where
     fn insert(&mut self, insertion: LayoutInsertion<WindowId>);
     fn remove(&mut self, window: &WindowId) -> bool;
     fn contains(&self, window: &WindowId) -> bool;
+    fn space_for(&self, window: &WindowId) -> Option<LayoutSpace>;
     fn clear(&mut self);
 
     /// Reconcile every managed leaf after output or workspace membership
@@ -178,7 +197,7 @@ where
     /// Fixed layouts keep the default no-op.
     fn prepare_arrange(
         &mut self,
-        _output: OutputId,
+        _space: LayoutSpace,
         _work_area: Rectangle<i32, Logical>,
         _gap: i32,
         _axis: LayoutAxis,
@@ -189,7 +208,7 @@ where
     /// Fixed layouts keep the default no-op.
     fn scroll_horizontally(
         &mut self,
-        _output: OutputId,
+        _space: LayoutSpace,
         _work_area: Rectangle<i32, Logical>,
         _gap: i32,
         _axis: LayoutAxis,
@@ -202,7 +221,7 @@ where
     /// original active leaf. The returned leaf should receive keyboard focus.
     fn finish_horizontal_scroll(
         &mut self,
-        _output: OutputId,
+        _space: LayoutSpace,
         _work_area: Rectangle<i32, Logical>,
         _gap: i32,
         _axis: LayoutAxis,
@@ -216,7 +235,7 @@ where
     /// outer insets are already reflected in `work_area`.
     fn arrange(
         &self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
     ) -> Vec<LayoutPlacement<WindowId>>;
@@ -341,11 +360,15 @@ where
         false
     }
 
+    fn space_for(&self, _window: &WindowId) -> Option<LayoutSpace> {
+        None
+    }
+
     fn clear(&mut self) {}
 
     fn arrange(
         &self,
-        _output: OutputId,
+        _space: LayoutSpace,
         _work_area: Rectangle<i32, Logical>,
         _gap: i32,
     ) -> Vec<LayoutPlacement<WindowId>> {
@@ -362,7 +385,7 @@ where
 /// stale axes. Removal collapses the now-single-child parent.
 #[derive(Debug)]
 struct DwindleLayout<WindowId> {
-    roots: HashMap<OutputId, DwindleNode<WindowId>>,
+    roots: HashMap<LayoutSpace, DwindleNode<WindowId>>,
 }
 
 impl<WindowId> Default for DwindleLayout<WindowId> {
@@ -594,9 +617,9 @@ where
 
     fn insert(&mut self, insertion: LayoutInsertion<WindowId>) {
         self.remove(&insertion.window);
-        let Some(root) = self.roots.get_mut(&insertion.output) else {
+        let Some(root) = self.roots.get_mut(&insertion.space) else {
             self.roots
-                .insert(insertion.output, DwindleNode::Window(insertion.window));
+                .insert(insertion.space, DwindleNode::Window(insertion.window));
             return;
         };
         let anchor = insertion
@@ -608,26 +631,32 @@ where
     }
 
     fn remove(&mut self, window: &WindowId) -> bool {
-        let output = self
+        let space = self
             .roots
             .iter()
-            .find_map(|(output, root)| root.contains(window).then_some(*output));
-        let Some(output) = output else {
+            .find_map(|(space, root)| root.contains(window).then_some(*space));
+        let Some(space) = space else {
             return false;
         };
         let root = self
             .roots
-            .remove(&output)
-            .expect("located dwindle output must exist");
+            .remove(&space)
+            .expect("located dwindle layout space must exist");
         let (root, removed) = root.remove(window);
         if let Some(root) = root {
-            self.roots.insert(output, root);
+            self.roots.insert(space, root);
         }
         removed
     }
 
     fn contains(&self, window: &WindowId) -> bool {
         self.roots.values().any(|root| root.contains(window))
+    }
+
+    fn space_for(&self, window: &WindowId) -> Option<LayoutSpace> {
+        self.roots
+            .iter()
+            .find_map(|(space, root)| root.contains(window).then_some(*space))
     }
 
     fn clear(&mut self) {
@@ -668,11 +697,11 @@ where
 
     fn arrange(
         &self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
     ) -> Vec<LayoutPlacement<WindowId>> {
-        let Some(root) = self.roots.get(&output) else {
+        let Some(root) = self.roots.get(&space) else {
             return Vec::new();
         };
         let mut placements = Vec::new();
@@ -691,7 +720,7 @@ where
 /// monitors do not produce very tall, narrow windows.
 #[derive(Debug)]
 struct ScrollingLayout<WindowId> {
-    rows: HashMap<OutputId, ScrollingRow<WindowId>>,
+    rows: HashMap<LayoutSpace, ScrollingRow<WindowId>>,
 }
 
 impl<WindowId> Default for ScrollingLayout<WindowId> {
@@ -987,7 +1016,7 @@ where
         self.remove(&insertion.window);
         let row = self
             .rows
-            .entry(insertion.output)
+            .entry(insertion.space)
             .or_insert_with(|| ScrollingRow {
                 columns: Vec::new(),
                 active: None,
@@ -1016,14 +1045,14 @@ where
     }
 
     fn remove(&mut self, window: &WindowId) -> bool {
-        let output = self
+        let space = self
             .rows
             .iter()
-            .find_map(|(output, row)| row.position(window).map(|index| (*output, index)));
-        let Some((output, index)) = output else {
+            .find_map(|(space, row)| row.position(window).map(|index| (*space, index)));
+        let Some((space, index)) = space else {
             return false;
         };
-        let row = self.rows.get_mut(&output).expect("located scrolling row");
+        let row = self.rows.get_mut(&space).expect("located scrolling row");
         let was_active = row.active.as_ref() == Some(window);
         let active_index = row.active_index();
         if index < active_index && row.viewport_extent > 0 {
@@ -1038,7 +1067,7 @@ where
         row.columns.remove(index);
         row.scroll_origin = None;
         if row.columns.is_empty() {
-            self.rows.remove(&output);
+            self.rows.remove(&space);
         } else if was_active {
             let next_active = index.checked_sub(1).unwrap_or(0).min(row.columns.len() - 1);
             row.active = Some(row.columns[next_active].window.clone());
@@ -1049,6 +1078,12 @@ where
 
     fn contains(&self, window: &WindowId) -> bool {
         self.rows.values().any(|row| row.position(window).is_some())
+    }
+
+    fn space_for(&self, window: &WindowId) -> Option<LayoutSpace> {
+        self.rows
+            .iter()
+            .find_map(|(space, row)| row.position(window).map(|_| *space))
     }
 
     fn clear(&mut self) {
@@ -1063,7 +1098,7 @@ where
             .map(|column| (column.window.clone(), column.width_fraction))
             .collect::<Vec<_>>();
 
-        for (output, previous) in previous_rows {
+        for (space, previous) in previous_rows {
             let previous_active_index = previous
                 .active
                 .as_ref()
@@ -1073,7 +1108,7 @@ where
                 .into_iter()
                 .filter(|column| {
                     insertions.iter().any(|insertion| {
-                        insertion.output == output && insertion.window == column.window
+                        insertion.space == space && insertion.window == column.window
                     })
                 })
                 .collect::<Vec<_>>();
@@ -1091,7 +1126,7 @@ where
                     })
                 });
             self.rows.insert(
-                output,
+                space,
                 ScrollingRow {
                     columns,
                     active,
@@ -1115,7 +1150,7 @@ where
                 .unwrap_or(DEFAULT_SCROLLING_COLUMN_FRACTION);
             let row = self
                 .rows
-                .entry(insertion.output)
+                .entry(insertion.space)
                 .or_insert_with(|| ScrollingRow {
                     columns: Vec::new(),
                     active: None,
@@ -1175,6 +1210,11 @@ where
                     swapped = true;
                 }
             }
+            if row.active.as_ref() == Some(first) {
+                row.active = Some(second.clone());
+            } else if row.active.as_ref() == Some(second) {
+                row.active = Some(first.clone());
+            }
             row.needs_reveal |= swapped;
         }
         true
@@ -1222,39 +1262,39 @@ where
 
     fn prepare_arrange(
         &mut self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
         axis: LayoutAxis,
     ) {
-        if let Some(row) = self.rows.get_mut(&output) {
+        if let Some(row) = self.rows.get_mut(&space) {
             row.prepare_arrange(work_area, gap.max(0), axis);
         }
     }
 
     fn scroll_horizontally(
         &mut self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
         axis: LayoutAxis,
         delta_x: f64,
     ) -> bool {
         self.rows
-            .get_mut(&output)
+            .get_mut(&space)
             .is_some_and(|row| row.scroll_horizontally(work_area, gap.max(0), axis, delta_x))
     }
 
     fn finish_horizontal_scroll(
         &mut self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
         axis: LayoutAxis,
         cancelled: bool,
         projected_translation: Option<f64>,
     ) -> Option<WindowId> {
-        self.rows.get_mut(&output)?.finish_horizontal_scroll(
+        self.rows.get_mut(&space)?.finish_horizontal_scroll(
             work_area,
             gap.max(0),
             axis,
@@ -1265,12 +1305,12 @@ where
 
     fn arrange(
         &self,
-        output: OutputId,
+        space: LayoutSpace,
         work_area: Rectangle<i32, Logical>,
         gap: i32,
     ) -> Vec<LayoutPlacement<WindowId>> {
         self.rows
-            .get(&output)
+            .get(&space)
             .map_or_else(Vec::new, |row| row.arrange(work_area, gap))
     }
 }
@@ -1335,7 +1375,9 @@ fn split_geometry(
 mod tests {
     use super::*;
 
-    const OUTPUT: OutputId = OutputId(1);
+    const OUTPUT: LayoutSpace = LayoutSpace::new(OutputId(1), 1);
+    const SECOND_OUTPUT: LayoutSpace = LayoutSpace::new(OutputId(2), 1);
+    const SECOND_WORKSPACE: LayoutSpace = LayoutSpace::new(OutputId(1), 2);
 
     fn rect(x: i32, y: i32, width: i32, height: i32) -> Rectangle<i32, Logical> {
         Rectangle::new(Point::from((x, y)), Size::from((width, height)))
@@ -1355,17 +1397,17 @@ mod tests {
         let mut layout = DwindleLayout::<u64>::default();
         layout.insert(LayoutInsertion {
             window: 1,
-            output: OUTPUT,
+            space: OUTPUT,
             anchor: None,
         });
         layout.insert(LayoutInsertion {
             window: 2,
-            output: OUTPUT,
+            space: OUTPUT,
             anchor: Some(1),
         });
         layout.insert(LayoutInsertion {
             window: 3,
-            output: OUTPUT,
+            space: OUTPUT,
             anchor: Some(2),
         });
 
@@ -1394,13 +1436,13 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
         }
         layout.insert(LayoutInsertion {
             window: 4,
-            output: OutputId(2),
+            space: SECOND_OUTPUT,
             anchor: None,
         });
 
@@ -1420,7 +1462,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            layout.arrange(OutputId(2), rect(800, 0, 800, 600), 0),
+            layout.arrange(SECOND_OUTPUT, rect(800, 0, 800, 600), 0),
             vec![LayoutPlacement {
                 window: 4,
                 geometry: rect(800, 0, 800, 600),
@@ -1433,7 +1475,7 @@ mod tests {
         let mut layout = create_window_layout::<u64>(WindowLayoutKind::Stacking);
         layout.insert(LayoutInsertion {
             window: 1,
-            output: OUTPUT,
+            space: OUTPUT,
             anchor: None,
         });
         assert!(!layout.manages_geometry());
@@ -1446,7 +1488,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
         }
@@ -1468,6 +1510,30 @@ mod tests {
                     geometry: rect(500, 300, 500, 300),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn dwindle_cross_space_swap_exchanges_authoritative_ownership() {
+        let mut layout = DwindleLayout::<u64>::default();
+        layout.insert(LayoutInsertion {
+            window: 1,
+            space: OUTPUT,
+            anchor: None,
+        });
+        layout.insert(LayoutInsertion {
+            window: 2,
+            space: SECOND_WORKSPACE,
+            anchor: None,
+        });
+
+        assert!(layout.swap(&1, &2));
+        assert_eq!(layout.space_for(&1), Some(SECOND_WORKSPACE));
+        assert_eq!(layout.space_for(&2), Some(OUTPUT));
+        assert_eq!(layout.arrange(OUTPUT, rect(0, 0, 800, 600), 0)[0].window, 2);
+        assert_eq!(
+            layout.arrange(SECOND_WORKSPACE, rect(0, 0, 800, 600), 0)[0].window,
+            1
         );
     }
 
@@ -1512,7 +1578,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
         }
@@ -1554,7 +1620,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1603,7 +1669,7 @@ mod tests {
                 .rev()
                 .map(|window| LayoutInsertion {
                     window,
-                    output: OUTPUT,
+                    space: OUTPUT,
                     anchor: (window < 3).then_some(window + 1),
                 })
                 .collect(),
@@ -1629,13 +1695,41 @@ mod tests {
     }
 
     #[test]
+    fn scrolling_cross_space_swap_keeps_active_ids_in_their_rows() {
+        let mut layout = ScrollingLayout::<u64>::default();
+        layout.insert(LayoutInsertion {
+            window: 1,
+            space: OUTPUT,
+            anchor: None,
+        });
+        layout.insert(LayoutInsertion {
+            window: 2,
+            space: SECOND_OUTPUT,
+            anchor: None,
+        });
+
+        assert!(layout.swap(&1, &2));
+        assert_eq!(layout.space_for(&1), Some(SECOND_OUTPUT));
+        assert_eq!(layout.space_for(&2), Some(OUTPUT));
+        for row in layout.rows.values() {
+            assert!(
+                row.active
+                    .as_ref()
+                    .is_some_and(|active| row.position(active).is_some())
+            );
+        }
+        assert!(layout.activate(&1) || layout.rows[&SECOND_OUTPUT].active == Some(1));
+        assert_eq!(layout.rows[&SECOND_OUTPUT].active, Some(1));
+    }
+
+    #[test]
     fn scrolling_keeps_every_tile_inside_once_their_existing_sizes_fit() {
         let mut layout = ScrollingLayout::<u64>::default();
         let work_area = rect(0, 0, 1000, 600);
         for window in 1..=2 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1677,7 +1771,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Vertical);
@@ -1709,7 +1803,7 @@ mod tests {
         for window in 1..=2 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1744,12 +1838,12 @@ mod tests {
         layout.rebuild(vec![
             LayoutInsertion {
                 window: 2,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: None,
             },
             LayoutInsertion {
                 window: 1,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: Some(2),
             },
         ]);
@@ -1776,7 +1870,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1838,7 +1932,7 @@ mod tests {
         for window in 1..=7 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1868,7 +1962,7 @@ mod tests {
         for window in 1..=5 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1902,7 +1996,7 @@ mod tests {
         for window in 1..=2 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 10, LayoutAxis::Horizontal);
@@ -1942,7 +2036,7 @@ mod tests {
         for window in 1..=3 {
             layout.insert(LayoutInsertion {
                 window,
-                output: OUTPUT,
+                space: OUTPUT,
                 anchor: (window > 1).then_some(window - 1),
             });
             prepare_scrolling(&mut layout, work_area, 0, LayoutAxis::Horizontal);

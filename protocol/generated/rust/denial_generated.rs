@@ -664,15 +664,16 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowEventKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_WINDOW_ACTION_KIND: u8 = 4;
+pub const ENUM_MAX_WINDOW_ACTION_KIND: u8 = 5;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_WINDOW_ACTION_KIND: [WindowActionKind; 5] = [
+pub const ENUM_VALUES_WINDOW_ACTION_KIND: [WindowActionKind; 6] = [
   WindowActionKind::Minimize,
   WindowActionKind::Maximize,
   WindowActionKind::Restore,
   WindowActionKind::ToggleMaximize,
   WindowActionKind::ToggleFullscreen,
+  WindowActionKind::Fullscreen,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -685,15 +686,17 @@ impl WindowActionKind {
   pub const Restore: Self = Self(2);
   pub const ToggleMaximize: Self = Self(3);
   pub const ToggleFullscreen: Self = Self(4);
+  pub const Fullscreen: Self = Self(5);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 4;
+  pub const ENUM_MAX: u8 = 5;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Minimize,
     Self::Maximize,
     Self::Restore,
     Self::ToggleMaximize,
     Self::ToggleFullscreen,
+    Self::Fullscreen,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -703,6 +706,7 @@ impl WindowActionKind {
       Self::Restore => Some("Restore"),
       Self::ToggleMaximize => Some("ToggleMaximize"),
       Self::ToggleFullscreen => Some("ToggleFullscreen"),
+      Self::Fullscreen => Some("Fullscreen"),
       _ => None,
     }
   }
@@ -4046,6 +4050,8 @@ impl<'a> Window<'a> {
   pub const VT_OPACITY_CLASS: flatbuffers::VOffsetT = 76;
   pub const VT_WORKSPACE_ID: flatbuffers::VOffsetT = 78;
   pub const VT_MINIMIZED: flatbuffers::VOffsetT = 80;
+  pub const VT_FULLSCREEN: flatbuffers::VOffsetT = 82;
+  pub const VT_MAXIMIZED: flatbuffers::VOffsetT = 84;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -4088,6 +4094,8 @@ impl<'a> Window<'a> {
     builder.add_width(args.width);
     if let Some(x) = args.app_id { builder.add_app_id(x); }
     if let Some(x) = args.title { builder.add_title(x); }
+    builder.add_maximized(args.maximized);
+    builder.add_fullscreen(args.fullscreen);
     builder.add_minimized(args.minimized);
     builder.add_opacity_class(args.opacity_class);
     builder.add_content_kind(args.content_kind);
@@ -4373,6 +4381,20 @@ impl<'a> Window<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<bool>(Window::VT_MINIMIZED, Some(false)).unwrap()}
   }
+  #[inline]
+  pub fn fullscreen(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(Window::VT_FULLSCREEN, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn maximized(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(Window::VT_MAXIMIZED, Some(false)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for Window<'_> {
@@ -4421,6 +4443,8 @@ impl flatbuffers::Verifiable for Window<'_> {
      .visit_field::<WindowOpacityClass>("opacity_class", Self::VT_OPACITY_CLASS, false)?
      .visit_field::<i64>("workspace_id", Self::VT_WORKSPACE_ID, false)?
      .visit_field::<bool>("minimized", Self::VT_MINIMIZED, false)?
+     .visit_field::<bool>("fullscreen", Self::VT_FULLSCREEN, false)?
+     .visit_field::<bool>("maximized", Self::VT_MAXIMIZED, false)?
      .finish();
     Ok(())
   }
@@ -4465,6 +4489,8 @@ pub struct WindowArgs<'a> {
     pub opacity_class: WindowOpacityClass,
     pub workspace_id: i64,
     pub minimized: bool,
+    pub fullscreen: bool,
+    pub maximized: bool,
 }
 impl<'a> Default for WindowArgs<'a> {
   #[inline]
@@ -4509,6 +4535,8 @@ impl<'a> Default for WindowArgs<'a> {
       opacity_class: WindowOpacityClass::ContentTranslucent,
       workspace_id: 1,
       minimized: false,
+      fullscreen: false,
+      maximized: false,
     }
   }
 }
@@ -4675,6 +4703,14 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> WindowBuilder<'a, 'b, A> {
     self.fbb_.push_slot::<bool>(Window::VT_MINIMIZED, minimized, false);
   }
   #[inline]
+  pub fn add_fullscreen(&mut self, fullscreen: bool) {
+    self.fbb_.push_slot::<bool>(Window::VT_FULLSCREEN, fullscreen, false);
+  }
+  #[inline]
+  pub fn add_maximized(&mut self, maximized: bool) {
+    self.fbb_.push_slot::<bool>(Window::VT_MAXIMIZED, maximized, false);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> WindowBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     WindowBuilder {
@@ -4731,6 +4767,8 @@ impl core::fmt::Debug for Window<'_> {
       ds.field("opacity_class", &self.opacity_class());
       ds.field("workspace_id", &self.workspace_id());
       ds.field("minimized", &self.minimized());
+      ds.field("fullscreen", &self.fullscreen());
+      ds.field("maximized", &self.maximized());
       ds.finish()
   }
 }

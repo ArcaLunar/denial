@@ -537,6 +537,8 @@ fn create_window_snapshot<'a>(
                 monitor_id: description.monitor_id,
                 workspace_id: description.workspace_id,
                 minimized: description.minimized,
+                fullscreen: description.fullscreen,
+                maximized: description.maximized,
                 pinned: description.pinned,
                 transform: description.transform,
                 scale_120: description.scale_120,
@@ -706,7 +708,17 @@ fn encode_shell_action(
 }
 
 pub(super) fn validate_cursor_state(state: &CursorStateDescription) -> Result<(), WireError> {
-    if state.epoch == 0 || !state.hotspot_x.is_finite() || !state.hotspot_y.is_finite() {
+    validate_cursor_state_payload(state)?;
+    if state.epoch == 0 {
+        return Err(WireError::Geometry);
+    }
+    Ok(())
+}
+
+pub(super) fn validate_cursor_state_payload(
+    state: &CursorStateDescription,
+) -> Result<(), WireError> {
+    if !state.hotspot_x.is_finite() || !state.hotspot_y.is_finite() {
         return Err(WireError::Geometry);
     }
     let shape = state.shape.trim();

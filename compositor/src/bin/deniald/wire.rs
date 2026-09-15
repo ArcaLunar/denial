@@ -57,8 +57,15 @@ mod encode;
 use decode::validate_notification_event;
 use encode::{encode_display_layout, encode_windows_response};
 
+#[cfg(test)]
 pub(super) fn validate_cursor_state(state: &CursorStateDescription) -> Result<(), WireError> {
     encode::validate_cursor_state(state)
+}
+
+pub(super) fn validate_cursor_state_payload(
+    state: &CursorStateDescription,
+) -> Result<(), WireError> {
+    encode::validate_cursor_state_payload(state)
 }
 
 pub const TO_NATIVE_CHANNEL: &str = "denial/wire/to_native";
@@ -239,6 +246,7 @@ impl WindowCommand {
 pub enum WindowAction {
     Minimize,
     Maximize,
+    Fullscreen,
     Restore,
     // Retained for wire compatibility and explicit UI toggles. Native
     // shortcuts use idempotent Maximize/Restore transitions.
@@ -344,6 +352,7 @@ impl WindowAction {
         match self {
             Self::Minimize => fb::WindowActionKind::Minimize,
             Self::Maximize => fb::WindowActionKind::Maximize,
+            Self::Fullscreen => fb::WindowActionKind::Fullscreen,
             Self::Restore => fb::WindowActionKind::Restore,
             Self::ToggleMaximize => fb::WindowActionKind::ToggleMaximize,
             Self::ToggleFullscreen => fb::WindowActionKind::ToggleFullscreen,
@@ -556,6 +565,8 @@ pub struct WindowDescription {
     pub monitor_id: i64,
     pub workspace_id: i64,
     pub minimized: bool,
+    pub fullscreen: bool,
+    pub maximized: bool,
     pub pinned: bool,
     pub transform: u32,
     pub scale_120: u32,

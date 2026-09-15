@@ -113,8 +113,7 @@ use super::local_windows::{LocalFlutterWindows, LocalWindowError};
 use super::native_shortcut::ShortcutManager;
 use super::settings::SettingsManager;
 use super::window_grab::{
-    MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, X11ResizeSurfaceGrab, checked_pointer_grab,
-    constrain_dimension,
+    MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, checked_pointer_grab, constrain_dimension,
 };
 use super::window_layout::{WindowLayout, create_window_layout};
 use super::window_placement_store::{
@@ -149,6 +148,8 @@ pub(super) mod input_method;
 #[cfg(feature = "flutter")]
 #[path = "wayland_frontend/insets.rs"]
 mod insets;
+#[path = "wayland_frontend/managed_window.rs"]
+mod managed_window;
 #[cfg(feature = "flutter")]
 pub(super) use focus::{restore_shell_keyboard_focus, suspend_keyboard_focus_for_shell};
 #[cfg(feature = "flutter")]
@@ -214,6 +215,7 @@ pub(super) use input::{
 #[cfg(feature = "flutter")]
 use input_method::EditorEndpoint;
 use input_method::InputMethodManager;
+use managed_window::toplevel_has_state;
 use output_power::OutputPowerManager;
 #[cfg(feature = "flutter")]
 use surface_snapshot::{rgba_payload_len, shm_cache_budget_for_atlas, snapshot_shm_buffer};
@@ -223,16 +225,13 @@ use topology::{
     choose_popup_output, clamp_window_geometry, configure_output, output_logical_bounds,
     saturating_point_sub,
 };
-use window_management::toplevel_has_state;
 #[cfg(feature = "flutter")]
 pub(super) use window_management::{
     apply_window_commands, queue_local_flutter_window_placement, queue_transient_window_placement,
     queue_window_placement,
 };
 #[cfg(feature = "flutter")]
-use window_management::{
-    shell_content_geometry, shell_draws_server_frame, shell_draws_x11_server_frame,
-};
+use window_management::{shell_content_geometry, shell_draws_server_frame};
 
 const MAX_PENDING_DMABUF_IMPORTS: usize = 128;
 const XDG_ACTIVATION_TOKEN_LIFETIME: Duration = Duration::from_secs(10);
@@ -447,8 +446,7 @@ pub(super) struct WaylandFrontend {
     surface_ids: HashMap<ObjectId, u64>,
     surfaces_by_id: HashMap<u64, WlSurface>,
     next_surface_id: u64,
-    configured_window_geometries: HashMap<ObjectId, Rectangle<i32, Logical>>,
-    exact_window_geometries: HashMap<ObjectId, Rectangle<i32, Logical>>,
+    window_geometry_intents: HashMap<ObjectId, WindowGeometryIntent>,
     restore_window_geometries: HashMap<ObjectId, Rectangle<i32, Logical>>,
     window_layout: Box<dyn WindowLayout<ObjectId>>,
     layout_restore_geometries: HashMap<ObjectId, Rectangle<i32, Logical>>,
@@ -626,33 +624,6 @@ struct FlutterPointerPress {
     location: Point<f64, Logical>,
 }
 
-#[cfg(feature = "flutter")]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ShellFullscreenTransition {
-    EnterShell,
-    ExitShell,
-    ExitClient,
-    Blocked,
-}
-
-#[cfg(feature = "flutter")]
-fn shell_fullscreen_transition(
-    client_fullscreen: bool,
-    shell_fullscreen: bool,
-    geometry_locked: bool,
-) -> ShellFullscreenTransition {
-    if client_fullscreen {
-        return ShellFullscreenTransition::ExitClient;
-    }
-    if shell_fullscreen {
-        return ShellFullscreenTransition::ExitShell;
-    }
-    if geometry_locked {
-        return ShellFullscreenTransition::Blocked;
-    }
-    ShellFullscreenTransition::EnterShell
-}
-
 struct WaylandOutput {
     id: OutputId,
     connector: String,
@@ -699,6 +670,79 @@ fn initial_xdg_placement_policy(
 struct PendingClientSizedPlacement {
     requested_location: Point<i32, Logical>,
     output_id: OutputId,
+}
+
+/// The single compositor-side geometry contract for a managed window.
+///
+/// Protocol callbacks may acknowledge or challenge this target, but neither
+/// XDG nor Xwayland gets a second placement record. Pending targets disappear
+/// after acknowledgement; authoritative targets remain until the policy which
+/// owns them (layout, client state, or shell state) explicitly replaces them.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct WindowGeometryIntent {
+    target: Rectangle<i32, Logical>,
+    authority: WindowGeometryAuthority,
+}
+
+impl WindowGeometryIntent {
+    fn retained_after_commit(self, committed: Size<i32, Logical>) -> bool {
+        committed != self.target.size || self.authority.persistent()
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WindowGeometryAuthority {
+    Pending,
+    Layout,
+    ClientState,
+    Shell,
+    Exact,
+}
+
+impl WindowGeometryAuthority {
+    const fn persistent(self) -> bool {
+        !matches!(self, Self::Pending)
+    }
+
+    const fn exact(self) -> bool {
+        matches!(self, Self::Shell | Self::Exact)
+    }
+}
+
+#[cfg(test)]
+mod window_geometry_intent_tests {
+    use super::*;
+
+    fn intent(authority: WindowGeometryAuthority) -> WindowGeometryIntent {
+        WindowGeometryIntent {
+            target: Rectangle::new((10, 20).into(), (800, 600).into()),
+            authority,
+        }
+    }
+
+    #[test]
+    fn matching_commit_releases_only_one_shot_geometry() {
+        let committed = Size::from((800, 600));
+        assert!(!intent(WindowGeometryAuthority::Pending).retained_after_commit(committed));
+        assert!(intent(WindowGeometryAuthority::Layout).retained_after_commit(committed));
+        assert!(intent(WindowGeometryAuthority::ClientState).retained_after_commit(committed));
+        assert!(intent(WindowGeometryAuthority::Shell).retained_after_commit(committed));
+        assert!(intent(WindowGeometryAuthority::Exact).retained_after_commit(committed));
+    }
+
+    #[test]
+    fn mismatched_commit_never_replaces_the_current_target() {
+        let committed = Size::from((1920, 1080));
+        for authority in [
+            WindowGeometryAuthority::Pending,
+            WindowGeometryAuthority::Layout,
+            WindowGeometryAuthority::ClientState,
+            WindowGeometryAuthority::Shell,
+            WindowGeometryAuthority::Exact,
+        ] {
+            assert!(intent(authority).retained_after_commit(committed));
+        }
+    }
 }
 
 #[cfg(feature = "flutter")]

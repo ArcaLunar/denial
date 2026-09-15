@@ -36,6 +36,12 @@ struct CursorFamily {
     names: &'static [&'static str],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum CursorOverride {
+    Hidden,
+    Named(&'static str),
+}
+
 const CURSOR_FAMILIES: &[CursorFamily] = &[
     CursorFamily {
         shape: "default",
@@ -293,14 +299,21 @@ pub(super) fn apply_to_command(command: &mut Command) {
     }
 }
 
-pub(super) fn shape_for_marker(width: u32, height: u32, rgba: &[u8]) -> Option<&'static str> {
+pub(super) fn override_for_marker(width: u32, height: u32, rgba: &[u8]) -> Option<CursorOverride> {
     if width != 1 || height != 1 || rgba.len() != 4 || rgba[..3] != [0, 0, 0] {
         return None;
+    }
+    if rgba[3] == 0 {
+        // Wine represents a null Win32 cursor with a one-pixel, all-zero X
+        // pixmap cursor rather than XFixesHideCursor. Xwayland consequently
+        // publishes a real wl_surface for it; preserve the application's hide
+        // intent instead of allowing the previous Denial shape to remain.
+        return Some(CursorOverride::Hidden);
     }
     CURSOR_FAMILIES
         .iter()
         .find(|family| family.alpha == rgba[3])
-        .map(|family| family.shape)
+        .map(|family| CursorOverride::Named(family.shape))
 }
 
 fn sentinel_cursor_file(alpha: u8) -> Vec<u8> {
@@ -398,18 +411,25 @@ mod tests {
     fn markers_round_trip_to_their_semantic_shapes() {
         for family in CURSOR_FAMILIES {
             assert_eq!(
-                shape_for_marker(1, 1, &[0, 0, 0, family.alpha]),
-                Some(family.shape)
+                override_for_marker(1, 1, &[0, 0, 0, family.alpha]),
+                Some(CursorOverride::Named(family.shape))
             );
         }
     }
 
     #[test]
+    fn all_zero_wine_cursor_decodes_as_hidden() {
+        assert_eq!(
+            override_for_marker(1, 1, &[0, 0, 0, 0]),
+            Some(CursorOverride::Hidden)
+        );
+    }
+
+    #[test]
     fn decoder_rejects_non_markers() {
-        assert_eq!(shape_for_marker(2, 1, &[0, 0, 0, 3]), None);
-        assert_eq!(shape_for_marker(1, 1, &[1, 0, 0, 3]), None);
-        assert_eq!(shape_for_marker(1, 1, &[0, 0, 0, 0]), None);
-        assert_eq!(shape_for_marker(1, 1, &[0, 0, 0, 16]), None);
+        assert_eq!(override_for_marker(2, 1, &[0, 0, 0, 3]), None);
+        assert_eq!(override_for_marker(1, 1, &[1, 0, 0, 3]), None);
+        assert_eq!(override_for_marker(1, 1, &[0, 0, 0, 16]), None);
     }
 
     #[test]

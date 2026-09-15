@@ -21,19 +21,6 @@ fn surface_crop_to_buffer(
     source.to_buffer(scale, transform.invert(), &logical_size)
 }
 
-#[cfg(feature = "flutter")]
-fn scene_window_output(
-    layout_managed: bool,
-    assigned_output: Option<OutputId>,
-    geometry_output: Option<OutputId>,
-) -> Option<OutputId> {
-    if layout_managed {
-        assigned_output.or(geometry_output)
-    } else {
-        geometry_output
-    }
-}
-
 #[cfg(all(test, feature = "flutter"))]
 mod surface_crop_tests {
     use super::*;
@@ -59,18 +46,6 @@ mod surface_crop_tests {
                 "{transform:?}",
             );
         }
-    }
-
-    #[test]
-    fn managed_window_keeps_its_assigned_output_when_geometry_overflows() {
-        assert_eq!(
-            scene_window_output(true, Some(OutputId(1)), Some(OutputId(2))),
-            Some(OutputId(1)),
-        );
-        assert_eq!(
-            scene_window_output(false, Some(OutputId(1)), Some(OutputId(2))),
-            Some(OutputId(2)),
-        );
     }
 }
 
@@ -362,7 +337,7 @@ impl WaylandFrontend {
         };
         let render_formats =
             <GlesRenderer as Bind<Dmabuf>>::supported_formats(renderer).unwrap_or_default();
-        self.set_screencopy_dmabuf_formats(render_formats);
+        self.set_screencopy_dmabuf_formats(render_formats, render_node);
         let formats = renderer.dmabuf_formats();
         let global = if let Some(node) = render_node {
             let feedback = DmabufFeedbackBuilder::new(node.dev_id(), formats).build()?;
@@ -991,36 +966,33 @@ impl WaylandFrontend {
             {
                 self.window_workspaces.insert(stable_id, parent_location);
             }
-            let geometry_output = self.output_for_geometry(geometry).map(|entry| entry.id);
-            // Scrolling rows intentionally place neighboring columns partly or
-            // wholly outside their output. Their workspace assignment is the
-            // presentation owner; geometry overlap must not migrate the window
-            // to an adjacent monitor while the row scrolls underneath a clip.
-            let output_id = scene_window_output(
-                self.window_is_layout_managed(window),
-                self.workspace_location(stable_id)
-                    .map(|location| location.output),
-                geometry_output,
-            );
-            let workspace_id = output_id
-                .and_then(|output| {
-                    self.reconcile_workspace_assignment(stable_id, output, minimized)
-                })
-                .map_or(-1, |location| i64::from(location.workspace));
+            // A managed leaf's layout space owns output and workspace as one
+            // value. In particular, a scrolling column may intentionally be
+            // geometrically inside another monitor while it is clipped by its
+            // own row; geometry must never become a second ownership path.
+            let layout_space = self.managed_layout_space(window);
+            let (output_id, workspace_id) = if let Some(space) = layout_space {
+                (Some(space.output), i64::from(space.workspace))
+            } else {
+                let output = self.output_for_geometry(geometry).map(|entry| entry.id);
+                let workspace = output
+                    .and_then(|output| {
+                        self.reconcile_workspace_assignment(stable_id, output, minimized)
+                    })
+                    .map_or(-1, |location| i64::from(location.workspace));
+                (output, workspace)
+            };
             let monitor_id = output_id
                 .and_then(|output| i64::try_from(output.0).ok())
                 .unwrap_or(-1);
-            let (suppress_animations, server_side_decorated, window_opacity) = x11
+            let presentation = self.managed_window_presentation(window);
+            let suppress_animations = x11
                 .as_ref()
-                .map(|x11| {
-                    let server_side_decorated = shell_draws_x11_server_frame(x11);
-                    (
-                        !server_side_decorated,
-                        server_side_decorated,
-                        xwayland::x11_window_opacity(x11),
-                    )
-                })
-                .unwrap_or((false, true, 1.0));
+                .is_some_and(|_| !presentation.server_side_decorated);
+            let server_side_decorated = presentation.server_side_decorated;
+            let window_opacity = x11
+                .as_ref()
+                .map_or(1.0, |x11| xwayland::x11_window_opacity(x11));
             if window_opacity < 1.0 {
                 for layer in &mut layers {
                     layer.opacity *= window_opacity;
@@ -1091,6 +1063,8 @@ impl WaylandFrontend {
                 monitor_id,
                 workspace_id,
                 minimized,
+                fullscreen: presentation.fullscreen,
+                maximized: presentation.maximized,
                 pinned: self.window_is_pinned(&window),
                 transform,
                 scale_120,
@@ -1198,6 +1172,8 @@ impl WaylandFrontend {
                 monitor_id,
                 workspace_id,
                 minimized,
+                fullscreen: false,
+                maximized: false,
                 pinned: self.pinned_windows.contains(&local_window.id),
                 transform: 0,
                 scale_120: 120,
@@ -1342,6 +1318,8 @@ impl WaylandFrontend {
                     monitor_id,
                     workspace_id: 1,
                     minimized: false,
+                    fullscreen: false,
+                    maximized: false,
                     pinned: false,
                     transform,
                     scale_120,

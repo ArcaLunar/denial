@@ -457,6 +457,14 @@ impl ShmTextureFrame {
                 .expect("one RGBA pixel is four bytes")
         })
     }
+
+    pub(crate) fn is_fully_transparent(&self) -> bool {
+        self.pixels()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 0)
+    }
 }
 
 #[derive(Clone)]

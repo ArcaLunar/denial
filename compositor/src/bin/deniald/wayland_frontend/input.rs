@@ -49,7 +49,7 @@ use super::super::settings::{MouseSettings, TouchpadSettings};
 #[cfg(feature = "flutter")]
 use super::super::window_grab::{
     LocalFlutterWindowGrab, MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, TileResizeGrab,
-    TileSwapGrab, X11ResizeSurfaceGrab,
+    TileSwapGrab,
 };
 #[cfg(feature = "flutter")]
 use super::super::window_layout::{LayoutDirection, LayoutResizeEdges};

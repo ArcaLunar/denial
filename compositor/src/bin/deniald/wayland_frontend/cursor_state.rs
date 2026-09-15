@@ -205,15 +205,29 @@ impl WaylandFrontend {
                     &mut layers,
                     &mut textures,
                 );
-                if let Some(shape) = self.xwayland_cursor_sentinel_shape_layer(&surface, &layers) {
+                if let Some(cursor_override) = self.xwayland_cursor_override(&surface) {
                     // Xwayland calls wl_pointer.set_cursor before attaching
                     // and committing the replacement buffer. It also reuses
                     // this surface for later application cursors, so the
                     // final composed layer is the first authoritative place
                     // to classify the buffer selected by that request.
                     textures.clear();
-                    self.published_cursor_state = Some(CursorPublication::Named(shape));
-                    CursorStateDescription::named(shape)
+                    let publication = match cursor_override {
+                        crate::xcursor_sentinel::CursorOverride::Hidden => {
+                            CursorPublication::Hidden
+                        }
+                        crate::xcursor_sentinel::CursorOverride::Named(shape) => {
+                            CursorPublication::Named(shape)
+                        }
+                    };
+                    self.published_cursor_state = Some(publication.clone());
+                    match publication {
+                        CursorPublication::Hidden => CursorStateDescription::hidden(),
+                        CursorPublication::Named(shape) => CursorStateDescription::named(shape),
+                        CursorPublication::Surface(_) => {
+                            unreachable!("cursor override is semantic")
+                        }
+                    }
                 } else {
                     CursorStateDescription {
                         epoch: 0,
@@ -390,8 +404,15 @@ impl WaylandFrontend {
                 let CursorImageStatus::Surface(surface) = &self.cursor_status else {
                     unreachable!("surface cursor intent must retain its wl_surface")
                 };
-                if let Some(shape) = self.xwayland_cursor_sentinel_shape(surface) {
-                    CursorPublication::Named(shape)
+                if let Some(cursor_override) = self.xwayland_cursor_override(surface) {
+                    match cursor_override {
+                        crate::xcursor_sentinel::CursorOverride::Hidden => {
+                            CursorPublication::Hidden
+                        }
+                        crate::xcursor_sentinel::CursorOverride::Named(shape) => {
+                            CursorPublication::Named(shape)
+                        }
+                    }
                 } else {
                     CursorPublication::Surface(surface.clone())
                 }
@@ -400,27 +421,22 @@ impl WaylandFrontend {
     }
 
     #[cfg(feature = "flutter")]
-    fn xwayland_cursor_sentinel_shape(&self, surface: &WlSurface) -> Option<&'static str> {
-        if !crate::xcursor_sentinel::is_active() || !self.is_xwayland_cursor_surface(surface) {
+    fn xwayland_cursor_override(
+        &self,
+        surface: &WlSurface,
+    ) -> Option<crate::xcursor_sentinel::CursorOverride> {
+        if !self.is_xwayland_cursor_surface(surface) {
             return None;
         }
         let frame = self.surface_shm_frames.get(&surface.id())?;
+        if frame.is_fully_transparent() {
+            return Some(crate::xcursor_sentinel::CursorOverride::Hidden);
+        }
+        if !crate::xcursor_sentinel::is_active() {
+            return None;
+        }
         let pixel = frame.pixels_if_single()?;
-        crate::xcursor_sentinel::shape_for_marker(frame.width(), frame.height(), &pixel)
-    }
-
-    #[cfg(feature = "flutter")]
-    fn xwayland_cursor_sentinel_shape_layer(
-        &self,
-        surface: &WlSurface,
-        layers: &[SurfaceLayerDescription],
-    ) -> Option<&'static str> {
-        (layers.len() == 1
-            && layers[0].role == SurfaceRoleDescription::Root
-            && layers[0].width == 1
-            && layers[0].height == 1)
-            .then(|| self.xwayland_cursor_sentinel_shape(surface))
-            .flatten()
+        crate::xcursor_sentinel::override_for_marker(frame.width(), frame.height(), &pixel)
     }
 
     #[cfg(feature = "flutter")]
