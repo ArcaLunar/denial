@@ -1,5 +1,6 @@
 //! Flutter-owned touch, pointer, gesture, and axis dispatch.
 
+use super::super::focus::request_keyboard_focus;
 use super::*;
 
 #[cfg(feature = "flutter")]
@@ -995,7 +996,7 @@ pub(super) fn activate_client_route(
         return scene_changed;
     };
     if keyboard.current_focus().as_ref() != Some(&keyboard_focus) {
-        keyboard.set_focus(state, Some(keyboard_focus), serial);
+        request_keyboard_focus(state, &keyboard, Some(keyboard_focus), serial);
         state
             .pending_window_events
             .push(PendingWindowEvent::Activated(route.region.window_id));

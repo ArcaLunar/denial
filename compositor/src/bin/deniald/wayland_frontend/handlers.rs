@@ -1,5 +1,6 @@
 #[cfg(feature = "flutter")]
 use super::super::render_audit_enabled;
+use super::focus::request_keyboard_focus;
 #[cfg(feature = "flutter")]
 use super::window_management::{
     activate_topmost_window, queue_client_window_placement_for_monitor,
@@ -1485,8 +1486,9 @@ impl XdgShellHandler for RuntimeState {
             let initial_activation = None::<u64>;
             initial_activation
         };
-        keyboard.set_focus(
+        request_keyboard_focus(
             self,
+            &keyboard,
             Some(KeyboardFocusTarget::Wayland(focus)),
             SERIAL_COUNTER.next_serial(),
         );
@@ -1916,6 +1918,17 @@ impl XdgShellHandler for RuntimeState {
                 ?serial,
                 keyboard_conflict, pointer_conflict, "rejected XDG popup grab over another grab"
             );
+            self.scene_sync.mark_dirty();
+            return;
+        }
+
+        #[cfg(feature = "flutter")]
+        if self
+            .wayland
+            .as_ref()
+            .is_some_and(|frontend| frontend.text_input.shell_captures_keyboard())
+        {
+            grab.ungrab(PopupUngrabStrategy::All);
             self.scene_sync.mark_dirty();
             return;
         }

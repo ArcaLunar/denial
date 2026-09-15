@@ -30,6 +30,9 @@ use super::super::wire::{
 };
 #[cfg(feature = "flutter")]
 use super::clamp_window_geometry;
+#[cfg(feature = "flutter")]
+use super::focus::clear_keyboard_focus;
+use super::focus::request_keyboard_focus;
 
 fn bound_geometry_size(mut geometry: Rectangle<i32, Logical>) -> Rectangle<i32, Logical> {
     geometry.size = Size::from((
@@ -291,7 +294,7 @@ pub(super) fn activate_window(
         }
     }
 
-    keyboard.set_focus(state, Some(keyboard_focus), serial);
+    request_keyboard_focus(state, &keyboard, Some(keyboard_focus), serial);
     #[cfg(feature = "flutter")]
     if let Some(window_id) = window_id {
         state
@@ -990,7 +993,7 @@ pub(super) fn activate_local_flutter_window(state: &mut RuntimeState, window_id:
         .get_keyboard()
         .expect("seat has no keyboard");
     deactivate_client_windows(state.wayland.as_mut().expect("missing Wayland frontend"));
-    keyboard.set_focus(state, None, SERIAL_COUNTER.next_serial());
+    clear_keyboard_focus(state, &keyboard, SERIAL_COUNTER.next_serial());
     state
         .pending_window_events
         .push(PendingWindowEvent::Activated(window_id));
@@ -1337,7 +1340,7 @@ pub(super) fn release_window_focus(state: &mut RuntimeState, window: &Window) ->
     {
         toplevel.send_pending_configure();
     }
-    keyboard.set_focus(state, None, SERIAL_COUNTER.next_serial());
+    clear_keyboard_focus(state, &keyboard, SERIAL_COUNTER.next_serial());
     state.scene_sync.mark_dirty();
     true
 }

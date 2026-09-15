@@ -456,6 +456,8 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             input_layout: None,
             #[cfg(feature = "flutter")]
+            shell_keyboard_focus: None,
+            #[cfg(feature = "flutter")]
             shell_fullscreen_locks: HashSet::new(),
             #[cfg(feature = "flutter")]
             pinned_windows: HashSet::new(),

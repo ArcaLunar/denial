@@ -150,6 +150,8 @@ pub(super) mod input_method;
 #[path = "wayland_frontend/insets.rs"]
 mod insets;
 #[cfg(feature = "flutter")]
+pub(super) use focus::{restore_shell_keyboard_focus, suspend_keyboard_focus_for_shell};
+#[cfg(feature = "flutter")]
 pub(super) use input::{dispatch_shell_keyboard, reconcile_flutter_pointer_route};
 #[path = "wayland_frontend/input_source.rs"]
 mod input_source;
@@ -461,6 +463,8 @@ pub(super) struct WaylandFrontend {
     local_vertical_restore_geometries: HashMap<u64, (f64, f64)>,
     #[cfg(feature = "flutter")]
     input_layout: Option<InputLayoutSnapshot>,
+    #[cfg(feature = "flutter")]
+    shell_keyboard_focus: Option<KeyboardFocusTarget>,
     #[cfg(feature = "flutter")]
     shell_fullscreen_locks: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]

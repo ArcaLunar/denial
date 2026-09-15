@@ -27,6 +27,7 @@ use super::super::RuntimeState;
 use super::super::wire::WindowAction;
 #[cfg(feature = "flutter")]
 use super::super::wire::{WindowPlacementChange, WindowPlacementPhase};
+use super::focus::request_keyboard_focus;
 use super::window_management::activate_window;
 #[cfg(feature = "flutter")]
 use super::window_management::{
@@ -460,8 +461,9 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
             .seat
             .get_keyboard()
             .expect("seat has no keyboard");
-        keyboard.set_focus(
+        request_keyboard_focus(
             state,
+            &keyboard,
             Some(KeyboardFocusTarget::X11(surface.clone())),
             SERIAL_COUNTER.next_serial(),
         );
@@ -550,7 +552,7 @@ fn unmap_x11_window(state: &mut RuntimeState, surface: &X11Surface) {
                 .as_ref()
                 .and_then(|frontend| frontend.surface_id(&root))
         });
-        keyboard.set_focus(state, next_focus, SERIAL_COUNTER.next_serial());
+        request_keyboard_focus(state, &keyboard, next_focus, SERIAL_COUNTER.next_serial());
         #[cfg(feature = "flutter")]
         if let Some(window_id) = next_window_id {
             state
