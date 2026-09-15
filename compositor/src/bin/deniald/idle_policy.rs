@@ -26,6 +26,7 @@ const SUSPEND_ENABLED: u8 = 1 << 2;
 const ENABLED_MASK: u8 = LOCK_ENABLED | DPMS_ENABLED | SUSPEND_ENABLED;
 const DISPLAY_POWER_OFF: u8 = 1;
 const MAX_TIMEOUT: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+const LOCK_AFTER_DPMS_DELAY: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct IdlePowerRequest {
@@ -434,8 +435,7 @@ impl IdlePolicy {
 
         if !self.lock_triggered
             && self
-                .configuration
-                .lock_timeout
+                .effective_lock_timeout()
                 .is_some_and(|timeout| elapsed >= timeout)
         {
             self.lock_triggered = true;
@@ -464,8 +464,7 @@ impl IdlePolicy {
         if actions.power_requests.is_empty()
             && !self.suspend_triggered
             && self
-                .configuration
-                .suspend_timeout
+                .effective_suspend_timeout()
                 .is_some_and(|timeout| elapsed >= timeout)
         {
             self.suspend_triggered = true;
@@ -485,13 +484,13 @@ impl IdlePolicy {
         }
         let mut deadline = None;
         if !self.lock_triggered {
-            deadline = earlier(deadline, self.configuration.lock_timeout);
+            deadline = earlier(deadline, self.effective_lock_timeout());
         }
         if !self.dpms_triggered {
             deadline = earlier(deadline, self.configuration.dpms_timeout);
         }
         if !self.suspend_triggered {
-            deadline = earlier(deadline, self.configuration.suspend_timeout);
+            deadline = earlier(deadline, self.effective_suspend_timeout());
         }
         deadline.map(|timeout| self.last_activity + timeout)
     }
@@ -519,6 +518,23 @@ impl IdlePolicy {
         self.lock_triggered = false;
         self.dpms_triggered = false;
         self.suspend_triggered = false;
+    }
+
+    fn effective_lock_timeout(&self) -> Option<Duration> {
+        self.configuration.lock_timeout.map(|timeout| {
+            if self.configuration.dpms_timeout == Some(timeout) {
+                timeout + LOCK_AFTER_DPMS_DELAY
+            } else {
+                timeout
+            }
+        })
+    }
+
+    fn effective_suspend_timeout(&self) -> Option<Duration> {
+        self.configuration.suspend_timeout.map(|timeout| {
+            self.effective_lock_timeout()
+                .map_or(timeout, |lock_timeout| timeout.max(lock_timeout))
+        })
     }
 
     fn wake_blanked_outputs(&mut self) -> Vec<IdlePowerRequest> {

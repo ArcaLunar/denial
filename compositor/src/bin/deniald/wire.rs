@@ -57,6 +57,10 @@ mod encode;
 use decode::validate_notification_event;
 use encode::{encode_display_layout, encode_windows_response};
 
+pub(super) fn validate_cursor_state(state: &CursorStateDescription) -> Result<(), WireError> {
+    encode::validate_cursor_state(state)
+}
+
 pub const TO_NATIVE_CHANNEL: &str = "denial/wire/to_native";
 pub const TO_FLUTTER_CHANNEL: &CStr = c"denial/wire/to_flutter";
 
@@ -263,6 +267,10 @@ pub enum ShellAction {
     Wallpaper,
     OpenSettings,
     WorkspaceChanged,
+    FocusLeft,
+    FocusRight,
+    FocusUp,
+    FocusDown,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -296,6 +304,10 @@ impl ShellAction {
             Self::Wallpaper => fb::ShellActionKind::Wallpaper,
             Self::OpenSettings => fb::ShellActionKind::OpenSettings,
             Self::WorkspaceChanged => fb::ShellActionKind::WorkspaceChanged,
+            Self::FocusLeft => fb::ShellActionKind::FocusLeft,
+            Self::FocusRight => fb::ShellActionKind::FocusRight,
+            Self::FocusUp => fb::ShellActionKind::FocusUp,
+            Self::FocusDown => fb::ShellActionKind::FocusDown,
         }
     }
 }

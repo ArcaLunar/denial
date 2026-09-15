@@ -82,7 +82,11 @@ enum ShellActionKind : ubyte {
   WindowSwitcherPrevious = 10,
   OpenSettings = 11,
   Dashboard = 12,
-  WorkspaceChanged = 13
+  WorkspaceChanged = 13,
+  FocusLeft = 14,
+  FocusRight = 15,
+  FocusUp = 16,
+  FocusDown = 17
 }
 
 enum KeyboardCommandKind : ubyte {
@@ -604,6 +608,7 @@ table TouchpadConfiguration {
   tap_to_click_enabled:bool = true;
   natural_scroll_enabled:bool;
   scroll_speed_factor:double = 1.0;
+  scrolling_layout_swipe_speed_factor:double = 1.0;
 }
 
 table MouseConfiguration {

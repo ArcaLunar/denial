@@ -121,6 +121,9 @@ mod window_placement_store;
 #[path = "deniald/wire.rs"]
 mod wire;
 #[cfg(feature = "flutter")]
+#[path = "deniald/xcursor_sentinel.rs"]
+mod xcursor_sentinel;
+#[cfg(feature = "flutter")]
 #[path = "deniald/xembed_tray.rs"]
 mod xembed_tray;
 
@@ -347,6 +350,10 @@ fn main() {
 fn denial_main() -> Result<(), Box<dyn Error>> {
     install_legacy_denial_environment_aliases();
     let options = Options::parse()?;
+    #[cfg(feature = "flutter")]
+    if options.wayland && options.flutter_bundle.is_some() {
+        xcursor_sentinel::install()?;
+    }
     if options.start_locked {
         // SAFETY: option parsing happens on the process's only thread, before
         // libseat, authentication, Flutter, or any other worker is started.

@@ -64,7 +64,7 @@ unavailable or overlap; do not sum them into a universal GPU utilization value.
 Cursor ticks describe scheduled updates, not proof that every update reached
 scanout. Use Denial's existing render audit to assess actual presentations and
 missed deadlines. Keep audit settings identical across comparisons. The current
-`DENIA_RENDER_AUDIT` flag also enables per-draw GPU timestamp queries; use it for
+`DENIAL_RENDER_AUDIT` flag also enables per-draw GPU timestamp queries; use it for
 separate diagnostic captures and measure final performance with auditing disabled
 on both sides. The first five saved series below used auditing, so their measured
 percentage changes should not be assumed to hold with auditing disabled.

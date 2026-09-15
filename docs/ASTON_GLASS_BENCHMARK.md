@@ -182,8 +182,8 @@ measured frame cadence and CPU raster durations for this comparison.
 
 Offline profile engine candidates defer persistent snapshots until changing
 backdrops settle, skip refraction and duplicate texture samples in flat glass
-interiors, and require `DENIA_GPU_STAGE_AUDIT=1` for the invasive per-draw GPU
-queries. Ordinary `DENIA_RENDER_AUDIT` diagnostics remain available separately.
+interiors, and require `DENIAL_GPU_STAGE_AUDIT=1` for the invasive per-draw GPU
+queries. Ordinary `DENIAL_RENDER_AUDIT` diagnostics remain available separately.
 These native candidates have not been activated in the Aston desktop session.
 The isolated comparison below measures them without replacing that runtime.
 
@@ -357,7 +357,7 @@ baseline measured 115.33 fps / 8.735 ms raster p95 for direct motion, 115.58 fps
 Use matched-affinity runs for subsequent engine comparisons; the earlier
 numbers do not establish an engine regression or improvement.
 
-`--direct-glass` sets `DENIA_GLASS_DIRECT_MATERIAL=1` only in the worker for
+`--direct-glass` sets `DENIAL_GLASS_DIRECT_MATERIAL=1` only in the worker for
 engines containing the experimental direct material path. It is disabled by
 default. The experiment skips the final full-size material texture only for
 uncached, direct GLES glass without an alpha threshold. Persistent snapshots,
@@ -601,7 +601,7 @@ retirement took roughly 9–19 ms at whole-second boundaries; initializing padde
 303 texture and 14 renderbuffer storage allocations per second. These are
 diagnostic timings, not a same-configuration throughput comparison.
 
-Candidate `6ae9cfbe` adds optional `DENIA_GLASS_RETAIN_TARGETS=1` retention for
+Candidate `6ae9cfbe` adds optional `DENIAL_GLASS_RETAIN_TARGETS=1` retention for
 GLES MSAA targets labeled specifically by the padded glass-layer path. The
 existing cache still handles active targets and its ordinary four-frame
 retention. Additional idle targets remain eligible for 2.5 seconds under a
@@ -767,7 +767,7 @@ driver operation responsible. The cache currently expires retained targets
 an animation cycle.
 
 An isolated profile-engine experiment adds opt-in
-`DENIA_GLASS_RETAIN_TARGETS_BY_BUDGET=1`: retain eligible idle targets under the
+`DENIAL_GLASS_RETAIN_TARGETS_BY_BUDGET=1`: retain eligible idle targets under the
 same 256 MiB estimated-attachment budget, evicting by recency when space is
 needed, without a timer expiry. This trades longer bounded retention for
 avoiding timed disposal after glass disappears. It does not add an operating
@@ -846,7 +846,7 @@ the corresponding extension, and sends explicit multisample blits through its
 general blitter rather than the ordinary 2D copy path.
 
 An isolated profile experiment, `a972794f`, adds opt-in
-`DENIA_GLES_IMPLICIT_MSAA=1`. It requires GLES 3, both render-to-texture
+`DENIAL_GLES_IMPLICIT_MSAA=1`. It requires GLES 3, both render-to-texture
 extensions and their function pointers; the existing default and four-sample
 antialiasing remain unchanged. Its startup log records the requested and actual
 path plus four-sample support. The worker records the request in JSON, and the

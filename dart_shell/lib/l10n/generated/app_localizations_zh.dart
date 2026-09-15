@@ -2043,6 +2043,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTouchpadScrollSpeed => '手指滚动速度';
 
   @override
+  String get settingsTouchpadScrollingLayoutSwipeSpeed => '滚动布局滑动速度';
+
+  @override
   String get settingsMousePointerSpeed => '鼠标指针速度';
 
   @override
@@ -2388,7 +2391,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWindowLayoutDescription =>
-      '堆叠允许窗口相互重叠。平铺动态划分桌面。滚动平铺将全高窗口列排列成跟随焦点的水平长带。';
+      '堆叠允许窗口相互重叠。平铺动态划分桌面。滚动平铺将窗口排列成跟随焦点的长带；显示器旋转 90° 或 270° 时，长带会改为纵向。';
 
   @override
   String get settingsWindowLayoutDwindle => '平铺';

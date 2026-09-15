@@ -325,9 +325,9 @@ enum ClientCursorIntent {
 fn resolved_client_cursor_intent(
     intent: ClientCursorIntent,
     allow_surface: bool,
-    drag_active: bool,
+    shell_cursor_override: bool,
 ) -> ClientCursorIntent {
-    if drag_active {
+    if shell_cursor_override {
         return ClientCursorIntent::Named("default");
     }
     match intent {
@@ -487,6 +487,8 @@ pub(super) struct WaylandFrontend {
     flutter_pointer_press: Option<FlutterPointerPress>,
     #[cfg(feature = "flutter")]
     clipboard_drag_active: bool,
+    #[cfg(feature = "flutter")]
+    compositor_pointer_grab_active: bool,
     wayland_pointer_buttons: HashSet<u32>,
     #[cfg(feature = "flutter")]
     routed_pointer_target: RoutedPointerTarget,

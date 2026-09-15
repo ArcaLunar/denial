@@ -103,23 +103,38 @@ fn gdk_unscaled_dpi(scale_120: u32) -> u32 {
     scaled_dpi(scale_120.max(SCALE_BASE), gdk_window_scale(scale_120))
 }
 
-pub(super) fn publish_dpi(
+pub(super) fn publish_settings(
     xwm: &mut X11Wm,
     scale_120: u32,
+    cursor_size: u32,
 ) -> Result<(), smithay::xwayland::xwm::SettingsError> {
     let xft_dpi = i32::try_from(dpi(scale_120).saturating_mul(1024)).unwrap_or(i32::MAX);
     let unscaled_dpi =
         i32::try_from(gdk_unscaled_dpi(scale_120).saturating_mul(1024)).unwrap_or(i32::MAX);
     let window_scale = i32::try_from(gdk_window_scale(scale_120)).unwrap_or(i32::MAX);
-    xwm.set_xsettings(
-        [
-            ("Gdk/WindowScalingFactor", window_scale),
-            ("Gdk/UnscaledDPI", unscaled_dpi),
-            ("Xft/DPI", xft_dpi),
-        ]
-        .into_iter()
-        .map(|(name, value)| (name.to_owned(), XSettingValue::Integer(value))),
-    )
+    let mut settings = vec![
+        (
+            "Gdk/WindowScalingFactor".to_owned(),
+            XSettingValue::Integer(window_scale),
+        ),
+        (
+            "Gdk/UnscaledDPI".to_owned(),
+            XSettingValue::Integer(unscaled_dpi),
+        ),
+        (
+            "Gtk/CursorThemeSize".to_owned(),
+            XSettingValue::Integer(i32::try_from(cursor_size).unwrap_or(i32::MAX)),
+        ),
+        ("Xft/DPI".to_owned(), XSettingValue::Integer(xft_dpi)),
+    ];
+    #[cfg(feature = "flutter")]
+    if crate::xcursor_sentinel::is_active() {
+        settings.push((
+            "Gtk/CursorThemeName".to_owned(),
+            XSettingValue::String(crate::xcursor_sentinel::THEME_NAME.to_owned()),
+        ));
+    }
+    xwm.set_xsettings(settings.into_iter())
 }
 
 impl super::WaylandFrontend {
@@ -138,10 +153,20 @@ impl super::WaylandFrontend {
             .compositor_state
             .set_client_scale(client_scale(scale_120));
         if let Some(xwm) = self.xwm.as_mut() {
-            publish_dpi(xwm, scale_120)?;
+            publish_settings(xwm, scale_120, self.settings.cursor_size())?;
         }
         self.xwayland_scale_120 = scale_120;
         Ok(true)
+    }
+
+    pub(crate) fn publish_xwayland_settings(
+        &mut self,
+    ) -> Result<(), smithay::xwayland::xwm::SettingsError> {
+        let cursor_size = self.settings.cursor_size();
+        if let Some(xwm) = self.xwm.as_mut() {
+            publish_settings(xwm, self.xwayland_scale_120, cursor_size)?;
+        }
+        Ok(())
     }
 
     pub(super) fn reconfigure_x11_for_scale(&self) -> Result<(), Box<dyn std::error::Error>> {

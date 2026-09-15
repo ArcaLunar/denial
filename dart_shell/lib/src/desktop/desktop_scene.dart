@@ -278,6 +278,7 @@ List<Widget> _buildDesktopWindowLayers({
   required bool reduceMotion,
   required DisplayLayout? displayLayout,
   required double devicePixelRatio,
+  required DesktopWindowRevealMountRegistry windowRevealRegistry,
   required ValueChanged<DenialWindow> onActivateWindow,
   required ValueChanged<DenialWindow> onCloseWindow,
   required ValueChanged<DenialWindow> onBeginOverviewDrag,
@@ -386,7 +387,11 @@ List<Widget> _buildDesktopWindowLayers({
         : Motion.overviewClose;
     final active = switching
         ? DesktopWindowSwitcherLayout.isSelected(switcher, placement.objectId)
-        : !overview && !placement.minimized && placement.z == topZ;
+        : overview
+        ? desktop.overview?.selectedObjectId == placement.objectId
+        : !placement.minimized && placement.z == topZ;
+    final selected =
+        overview && desktop.overview?.selectedObjectId == placement.objectId;
     layers.add(
       _DesktopWindowFrame(
         key: ValueKey<int>(placement.objectId),
@@ -405,6 +410,8 @@ List<Widget> _buildDesktopWindowLayers({
         switching: switching,
         motionDuration: motionDuration,
         active: active,
+        selected: selected,
+        windowRevealRegistry: windowRevealRegistry,
         onOverviewTap: () => onActivateWindow(window),
         onOverviewClose: () => onCloseWindow(window),
         onOverviewDragStart: () => onBeginOverviewDrag(window),
@@ -516,6 +523,8 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   final Map<int, _ClosingDesktopWindow> _closingWindows =
       <int, _ClosingDesktopWindow>{};
   final Map<int, Rect> _minimizedPlacementExitFrames = <int, Rect>{};
+  final DesktopWindowRevealMountRegistry _windowRevealRegistry =
+      DesktopWindowRevealMountRegistry();
   late final DesktopMinimizeLayerHandoffController _minimizeLayerHandoff;
   late final DesktopMinimizedPlacementTransitionController
   _minimizedPlacementTransition;
@@ -603,6 +612,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final activeObjectIds = <int>{
       for (final window in widget.windows) window.objectId,
     };
+    _windowRevealRegistry.retainOnly(activeObjectIds);
     _minimizeLayerHandoff.retainOnly(activeObjectIds);
     final animateMinimize = !MediaQuery.disableAnimationsOf(context);
     for (final placement in widget.desktop.placements.values) {
@@ -687,6 +697,14 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         continue;
       }
       final closeId = _nextCloseId++;
+      final clipScrollingTile =
+          ref.read(shellSettingsProvider).layout.windowLayout ==
+              DesktopWindowLayout.scrolling &&
+          !oldWidget.desktop.isInOverview(window.objectId) &&
+          !DesktopWindowSwitcherLayout.contains(
+            oldWidget.windowSwitcher,
+            window.objectId,
+          );
       _closingWindows[closeId] = _ClosingDesktopWindow(
         id: closeId,
         window: window,
@@ -695,6 +713,12 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
             placement.fullscreen &&
             !oldWidget.desktop.isInOverview(window.objectId),
         effect: widget.closeEffect,
+        outputClip: clipScrollingTile
+            ? desktopOutputPixelGridForMonitor(
+                oldWidget.displayLayout,
+                placement.monitorId,
+              )?.logicalRect
+            : null,
       );
     }
   }
@@ -894,6 +918,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     reduceMotion: reduceMotion,
                     displayLayout: displayLayout,
                     devicePixelRatio: devicePixelRatio,
+                    windowRevealRegistry: _windowRevealRegistry,
                     onActivateWindow: onActivateWindow,
                     onCloseWindow: onCloseWindow,
                     onBeginOverviewDrag: onBeginOverviewDrag,
@@ -951,6 +976,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     reduceMotion: reduceMotion,
                     displayLayout: displayLayout,
                     devicePixelRatio: devicePixelRatio,
+                    windowRevealRegistry: _windowRevealRegistry,
                     onActivateWindow: onActivateWindow,
                     onCloseWindow: onCloseWindow,
                     onBeginOverviewDrag: onBeginOverviewDrag,

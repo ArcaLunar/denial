@@ -45,8 +45,9 @@ fn configured_window_size(
     minimum: Size<i32, Logical>,
     maximum: Size<i32, Logical>,
     exact: bool,
+    shell_fullscreen_locked: bool,
 ) -> Size<i32, Logical> {
-    if exact {
+    if exact || shell_fullscreen_locked {
         requested
     } else {
         Size::from((
@@ -171,6 +172,16 @@ fn preserves_client_fullscreen_geometry(
     requested_target: Rectangle<i32, Logical>,
 ) -> bool {
     client_fullscreen && current_target == requested_target
+}
+
+#[cfg(feature = "flutter")]
+fn layout_rejects_configure(
+    layout_managed: bool,
+    shell_fullscreen_locked: bool,
+    current_target: Rectangle<i32, Logical>,
+    requested_target: Rectangle<i32, Logical>,
+) -> bool {
+    layout_managed && !shell_fullscreen_locked && current_target != requested_target
 }
 
 #[cfg(feature = "flutter")]
@@ -323,6 +334,70 @@ pub(super) fn activate_topmost_window(state: &mut RuntimeState) -> bool {
             .cloned()
     };
     next.is_some_and(|window| activate_window(state, &window, SERIAL_COUNTER.next_serial()))
+}
+
+/// Gives focus to a usable window when a workspace has no remembered target.
+///
+/// Native windows retain a compositor-owned stacking order, so try them from
+/// topmost to bottommost. Local Flutter windows do not currently have an
+/// equivalent native stack; they remain a last-resort target for workspaces
+/// that contain no activatable client window.
+#[cfg(feature = "flutter")]
+fn activate_workspace_fallback(
+    state: &mut RuntimeState,
+    monitor_id: i64,
+    workspace_id: u8,
+) -> bool {
+    let Some(output_id) = u64::try_from(monitor_id).ok() else {
+        return false;
+    };
+    let (client_windows, local_window_ids) = {
+        let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
+        let belongs_to_workspace = |window_id| {
+            frontend
+                .workspace_location(window_id)
+                .is_some_and(|location| {
+                    location.output.0 == output_id && location.workspace == workspace_id
+                })
+        };
+        let client_windows = frontend
+            .space
+            .elements()
+            .rev()
+            .filter(|candidate| {
+                candidate
+                    .x11_surface()
+                    .is_none_or(|x11| !x11.is_override_redirect())
+                    && frontend.window_root_surface(candidate).is_some_and(|root| {
+                        root.is_alive()
+                            && !frontend.minimized_windows.contains(&root.id())
+                            && frontend
+                                .surface_id(&root)
+                                .is_some_and(&belongs_to_workspace)
+                    })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let local_window_ids = frontend
+            .local_windows
+            .iter()
+            .filter(|window| {
+                !frontend.minimized_local_windows.contains(&window.id)
+                    && belongs_to_workspace(window.id)
+            })
+            .map(|window| window.id)
+            .collect::<Vec<_>>();
+        (client_windows, local_window_ids)
+    };
+
+    for window in client_windows {
+        if activate_window(state, &window, SERIAL_COUNTER.next_serial()) {
+            return true;
+        }
+    }
+    local_window_ids
+        .into_iter()
+        .any(|window_id| activate_local_flutter_window(state, window_id))
 }
 
 #[cfg(feature = "flutter")]
@@ -498,6 +573,11 @@ pub(in super::super) fn apply_window_commands(
                         .configure_mobile_window(&window);
                     continue;
                 }
+                let shell_fullscreen_locked = state
+                    .wayland
+                    .as_ref()
+                    .expect("missing Wayland frontend")
+                    .window_shell_fullscreen_locked(&window);
                 let requested_size = Size::<i32, Logical>::from((
                     geometry.width.round() as i32,
                     geometry.height.round() as i32,
@@ -530,7 +610,17 @@ pub(in super::super) fn apply_window_commands(
                 } else {
                     continue;
                 };
-                let size = configured_window_size(requested_size, minimum, maximum, exact);
+                // Fullscreen owns the output rectangle. Games commonly make
+                // their current maximized resolution both the X11 minimum and
+                // maximum; honoring those hints here would leave the native
+                // surface maximized while Flutter stretches it fullscreen.
+                let size = configured_window_size(
+                    requested_size,
+                    minimum,
+                    maximum,
+                    exact,
+                    shell_fullscreen_locked,
+                );
                 let scene_origin = state
                     .wayland
                     .as_ref()
@@ -547,12 +637,17 @@ pub(in super::super) fn apply_window_commands(
                 let target = Rectangle::new(target_location, size);
                 if !exact {
                     let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
-                    if frontend.window_is_layout_managed(&window)
-                        && frontend.window_geometry_target(&window) != target
-                    {
+                    if layout_rejects_configure(
+                        frontend.window_is_layout_managed(&window),
+                        shell_fullscreen_locked,
+                        frontend.window_geometry_target(&window),
+                        target,
+                    ) {
                         // Flutter mirrors compositor geometry for rendering and
                         // also emits interactive stacking placement. A managed
-                        // layout remains the sole geometry authority.
+                        // layout remains the sole geometry authority, except
+                        // while shell fullscreen temporarily overlays its
+                        // retained tile.
                         continue;
                     }
                 }
@@ -715,20 +810,25 @@ pub(super) fn switch_monitor_workspace(
         .wayland
         .as_ref()
         .and_then(|frontend| frontend.remembered_workspace_focus(monitor_id, workspace_id));
-    if let Some(window_id) = remembered {
+    let restored_focus = remembered.is_some_and(|window_id| {
         if state
             .wayland
             .as_ref()
             .is_some_and(|frontend| frontend.is_local_flutter_window(window_id))
         {
-            activate_local_flutter_window(state, window_id);
+            activate_local_flutter_window(state, window_id)
         } else if let Some(window) = state
             .wayland
             .as_ref()
             .and_then(|frontend| frontend.window_for_id(window_id))
         {
-            activate_window(state, &window, SERIAL_COUNTER.next_serial());
+            activate_window(state, &window, SERIAL_COUNTER.next_serial())
+        } else {
+            false
         }
+    });
+    if !restored_focus {
+        activate_workspace_fallback(state, monitor_id, workspace_id);
     }
     state.scene_sync.mark_dirty();
     true
@@ -2027,4 +2127,40 @@ pub(super) fn toplevel_has_state(
             .states
             .contains(xdg_state)
     })
+}
+
+#[cfg(all(test, feature = "flutter"))]
+mod tests {
+    use smithay::utils::{Logical, Point, Rectangle, Size};
+
+    use super::{configured_window_size, layout_rejects_configure};
+
+    fn rect(x: i32, y: i32, width: i32, height: i32) -> Rectangle<i32, Logical> {
+        Rectangle::new(Point::from((x, y)), Size::from((width, height)))
+    }
+
+    #[test]
+    fn managed_layout_accepts_shell_fullscreen_geometry() {
+        let tile = rect(10, 10, 940, 1040);
+        let fullscreen = rect(0, 0, 1920, 1080);
+
+        assert!(layout_rejects_configure(true, false, tile, fullscreen));
+        assert!(!layout_rejects_configure(true, true, tile, fullscreen));
+        assert!(!layout_rejects_configure(true, false, tile, tile));
+    }
+
+    #[test]
+    fn shell_fullscreen_overrides_fixed_client_size_hints() {
+        let maximized = Size::<i32, Logical>::from((2542, 1397));
+        let fullscreen = Size::<i32, Logical>::from((2560, 1440));
+
+        assert_eq!(
+            configured_window_size(fullscreen, maximized, maximized, false, false),
+            maximized,
+        );
+        assert_eq!(
+            configured_window_size(fullscreen, maximized, maximized, false, true),
+            fullscreen,
+        );
+    }
 }

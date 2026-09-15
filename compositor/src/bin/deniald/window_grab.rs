@@ -358,6 +358,13 @@ impl PointerGrab<RuntimeState> for MoveSurfaceGrab {
 
     fn unset(&mut self, data: &mut RuntimeState) {
         #[cfg(feature = "flutter")]
+        if !self.forward_buttons {
+            data.wayland
+                .as_mut()
+                .expect("missing Wayland frontend")
+                .set_compositor_pointer_grab_active(false);
+        }
+        #[cfg(feature = "flutter")]
         if window_accepts_grab_updates(data, &self.window) {
             let geometry = data
                 .wayland
@@ -538,6 +545,10 @@ impl PointerGrab<RuntimeState> for TileSwapGrab {
     }
 
     fn unset(&mut self, data: &mut RuntimeState) {
+        data.wayland
+            .as_mut()
+            .expect("missing Wayland frontend")
+            .set_compositor_pointer_grab_active(false);
         if !window_is_mapped(data, &self.window) {
             self.clear_preview(data);
             return;
@@ -684,6 +695,10 @@ impl PointerGrab<RuntimeState> for TileResizeGrab {
     }
 
     fn unset(&mut self, data: &mut RuntimeState) {
+        data.wayland
+            .as_mut()
+            .expect("missing Wayland frontend")
+            .set_compositor_pointer_grab_active(false);
         for window in self.affected_windows.clone() {
             if !window_is_mapped(data, &window) {
                 continue;
@@ -993,6 +1008,13 @@ impl ResizeSurfaceGrab {
             return;
         }
         self.finished = true;
+        #[cfg(feature = "flutter")]
+        if !self.forward_buttons {
+            data.wayland
+                .as_mut()
+                .expect("missing Wayland frontend")
+                .set_compositor_pointer_grab_active(false);
+        }
         let constrained =
             self.toplevel.wl_surface().is_alive() && toplevel_is_constrained(&self.toplevel);
         if self.toplevel.wl_surface().is_alive() {
@@ -1300,6 +1322,13 @@ impl PointerGrab<RuntimeState> for X11ResizeSurfaceGrab {
     }
 
     fn unset(&mut self, data: &mut RuntimeState) {
+        #[cfg(feature = "flutter")]
+        if !self.forward_buttons {
+            data.wayland
+                .as_mut()
+                .expect("missing Wayland frontend")
+                .set_compositor_pointer_grab_active(false);
+        }
         #[cfg(feature = "flutter")]
         if window_is_mapped(data, &self.window) {
             super::wayland_frontend::queue_window_placement(

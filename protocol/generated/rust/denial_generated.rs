@@ -761,10 +761,10 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowActionKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_SHELL_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_SHELL_ACTION_KIND: u8 = 13;
+pub const ENUM_MAX_SHELL_ACTION_KIND: u8 = 17;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 14] = [
+pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 18] = [
   ShellActionKind::Applications,
   ShellActionKind::Overview,
   ShellActionKind::WindowSwitcherNext,
@@ -779,6 +779,10 @@ pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 14] = [
   ShellActionKind::OpenSettings,
   ShellActionKind::Dashboard,
   ShellActionKind::WorkspaceChanged,
+  ShellActionKind::FocusLeft,
+  ShellActionKind::FocusRight,
+  ShellActionKind::FocusUp,
+  ShellActionKind::FocusDown,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -800,9 +804,13 @@ impl ShellActionKind {
   pub const OpenSettings: Self = Self(11);
   pub const Dashboard: Self = Self(12);
   pub const WorkspaceChanged: Self = Self(13);
+  pub const FocusLeft: Self = Self(14);
+  pub const FocusRight: Self = Self(15);
+  pub const FocusUp: Self = Self(16);
+  pub const FocusDown: Self = Self(17);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 13;
+  pub const ENUM_MAX: u8 = 17;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Applications,
     Self::Overview,
@@ -818,6 +826,10 @@ impl ShellActionKind {
     Self::OpenSettings,
     Self::Dashboard,
     Self::WorkspaceChanged,
+    Self::FocusLeft,
+    Self::FocusRight,
+    Self::FocusUp,
+    Self::FocusDown,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -836,6 +848,10 @@ impl ShellActionKind {
       Self::OpenSettings => Some("OpenSettings"),
       Self::Dashboard => Some("Dashboard"),
       Self::WorkspaceChanged => Some("WorkspaceChanged"),
+      Self::FocusLeft => Some("FocusLeft"),
+      Self::FocusRight => Some("FocusRight"),
+      Self::FocusUp => Some("FocusUp"),
+      Self::FocusDown => Some("FocusDown"),
       _ => None,
     }
   }
@@ -8189,6 +8205,7 @@ impl<'a> TouchpadConfiguration<'a> {
   pub const VT_TAP_TO_CLICK_ENABLED: flatbuffers::VOffsetT = 4;
   pub const VT_NATURAL_SCROLL_ENABLED: flatbuffers::VOffsetT = 6;
   pub const VT_SCROLL_SPEED_FACTOR: flatbuffers::VOffsetT = 8;
+  pub const VT_SCROLLING_LAYOUT_SWIPE_SPEED_FACTOR: flatbuffers::VOffsetT = 10;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -8200,6 +8217,7 @@ impl<'a> TouchpadConfiguration<'a> {
     args: &'args TouchpadConfigurationArgs
   ) -> flatbuffers::WIPOffset<TouchpadConfiguration<'bldr>> {
     let mut builder = TouchpadConfigurationBuilder::new(_fbb);
+    builder.add_scrolling_layout_swipe_speed_factor(args.scrolling_layout_swipe_speed_factor);
     builder.add_scroll_speed_factor(args.scroll_speed_factor);
     builder.add_natural_scroll_enabled(args.natural_scroll_enabled);
     builder.add_tap_to_click_enabled(args.tap_to_click_enabled);
@@ -8228,6 +8246,13 @@ impl<'a> TouchpadConfiguration<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<f64>(TouchpadConfiguration::VT_SCROLL_SPEED_FACTOR, Some(1.0)).unwrap()}
   }
+  #[inline]
+  pub fn scrolling_layout_swipe_speed_factor(&self) -> f64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f64>(TouchpadConfiguration::VT_SCROLLING_LAYOUT_SWIPE_SPEED_FACTOR, Some(1.0)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for TouchpadConfiguration<'_> {
@@ -8240,6 +8265,7 @@ impl flatbuffers::Verifiable for TouchpadConfiguration<'_> {
      .visit_field::<bool>("tap_to_click_enabled", Self::VT_TAP_TO_CLICK_ENABLED, false)?
      .visit_field::<bool>("natural_scroll_enabled", Self::VT_NATURAL_SCROLL_ENABLED, false)?
      .visit_field::<f64>("scroll_speed_factor", Self::VT_SCROLL_SPEED_FACTOR, false)?
+     .visit_field::<f64>("scrolling_layout_swipe_speed_factor", Self::VT_SCROLLING_LAYOUT_SWIPE_SPEED_FACTOR, false)?
      .finish();
     Ok(())
   }
@@ -8248,6 +8274,7 @@ pub struct TouchpadConfigurationArgs {
     pub tap_to_click_enabled: bool,
     pub natural_scroll_enabled: bool,
     pub scroll_speed_factor: f64,
+    pub scrolling_layout_swipe_speed_factor: f64,
 }
 impl<'a> Default for TouchpadConfigurationArgs {
   #[inline]
@@ -8256,6 +8283,7 @@ impl<'a> Default for TouchpadConfigurationArgs {
       tap_to_click_enabled: true,
       natural_scroll_enabled: false,
       scroll_speed_factor: 1.0,
+      scrolling_layout_swipe_speed_factor: 1.0,
     }
   }
 }
@@ -8278,6 +8306,10 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> TouchpadConfigurationBuilder<'a
     self.fbb_.push_slot::<f64>(TouchpadConfiguration::VT_SCROLL_SPEED_FACTOR, scroll_speed_factor, 1.0);
   }
   #[inline]
+  pub fn add_scrolling_layout_swipe_speed_factor(&mut self, scrolling_layout_swipe_speed_factor: f64) {
+    self.fbb_.push_slot::<f64>(TouchpadConfiguration::VT_SCROLLING_LAYOUT_SWIPE_SPEED_FACTOR, scrolling_layout_swipe_speed_factor, 1.0);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> TouchpadConfigurationBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     TouchpadConfigurationBuilder {
@@ -8298,6 +8330,7 @@ impl core::fmt::Debug for TouchpadConfiguration<'_> {
       ds.field("tap_to_click_enabled", &self.tap_to_click_enabled());
       ds.field("natural_scroll_enabled", &self.natural_scroll_enabled());
       ds.field("scroll_speed_factor", &self.scroll_speed_factor());
+      ds.field("scrolling_layout_swipe_speed_factor", &self.scrolling_layout_swipe_speed_factor());
       ds.finish()
   }
 }

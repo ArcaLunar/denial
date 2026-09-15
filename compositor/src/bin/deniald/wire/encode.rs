@@ -328,6 +328,7 @@ impl WireBridge {
                 tap_to_click_enabled: touchpad.tap_to_click_enabled,
                 natural_scroll_enabled: touchpad.natural_scroll_enabled,
                 scroll_speed_factor: touchpad.scroll_speed_factor,
+                scrolling_layout_swipe_speed_factor: touchpad.scrolling_layout_swipe_speed_factor,
             },
         );
         let mouse = fb::MouseConfiguration::create(
@@ -704,7 +705,7 @@ fn encode_shell_action(
     validate_finished_message(builder)
 }
 
-fn validate_cursor_state(state: &CursorStateDescription) -> Result<(), WireError> {
+pub(super) fn validate_cursor_state(state: &CursorStateDescription) -> Result<(), WireError> {
     if state.epoch == 0 || !state.hotspot_x.is_finite() || !state.hotspot_y.is_finite() {
         return Err(WireError::Geometry);
     }

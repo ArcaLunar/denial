@@ -3814,6 +3814,12 @@ abstract class AppLocalizations {
   /// **'Finger scroll speed'**
   String get settingsTouchpadScrollSpeed;
 
+  /// Label for the continuous three-finger scrolling-layout swipe speed slider.
+  ///
+  /// In en, this message translates to:
+  /// **'Scrolling layout swipe speed'**
+  String get settingsTouchpadScrollingLayoutSwipeSpeed;
+
   /// Label for the mouse pointer speed slider.
   ///
   /// In en, this message translates to:
@@ -4453,7 +4459,7 @@ abstract class AppLocalizations {
   /// Explains the available desktop window layouts.
   ///
   /// In en, this message translates to:
-  /// **'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling arranges full-height columns in a focus-following horizontal strip.'**
+  /// **'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling follows focus along a strip that turns vertical with a quarter-turned monitor.'**
   String get settingsWindowLayoutDescription;
 
   /// Label for the Dwindle tiling window layout.
@@ -4468,7 +4474,7 @@ abstract class AppLocalizations {
   /// **'Stacking'**
   String get settingsWindowLayoutStacking;
 
-  /// Label for the focus-following horizontal scrolling layout.
+  /// Label for the focus-following adaptive-axis scrolling layout.
   ///
   /// In en, this message translates to:
   /// **'Scrolling'**

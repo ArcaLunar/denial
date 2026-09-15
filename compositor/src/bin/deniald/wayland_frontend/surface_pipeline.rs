@@ -21,6 +21,19 @@ fn surface_crop_to_buffer(
     source.to_buffer(scale, transform.invert(), &logical_size)
 }
 
+#[cfg(feature = "flutter")]
+fn scene_window_output(
+    layout_managed: bool,
+    assigned_output: Option<OutputId>,
+    geometry_output: Option<OutputId>,
+) -> Option<OutputId> {
+    if layout_managed {
+        assigned_output.or(geometry_output)
+    } else {
+        geometry_output
+    }
+}
+
 #[cfg(all(test, feature = "flutter"))]
 mod surface_crop_tests {
     use super::*;
@@ -46,6 +59,18 @@ mod surface_crop_tests {
                 "{transform:?}",
             );
         }
+    }
+
+    #[test]
+    fn managed_window_keeps_its_assigned_output_when_geometry_overflows() {
+        assert_eq!(
+            scene_window_output(true, Some(OutputId(1)), Some(OutputId(2))),
+            Some(OutputId(1)),
+        );
+        assert_eq!(
+            scene_window_output(false, Some(OutputId(1)), Some(OutputId(2))),
+            Some(OutputId(2)),
+        );
     }
 }
 
@@ -958,10 +983,6 @@ impl WaylandFrontend {
             } else {
                 fallback_height
             };
-            let monitor_id = self
-                .output_for_geometry(geometry)
-                .and_then(|entry| i64::try_from(entry.id.0).ok())
-                .unwrap_or(-1);
             let minimized = self.minimized_windows.contains(&surface.id());
             if !minimized
                 && self.workspace_location(stable_id).is_none()
@@ -970,12 +991,25 @@ impl WaylandFrontend {
             {
                 self.window_workspaces.insert(stable_id, parent_location);
             }
-            let output_id = self.output_for_geometry(geometry).map(|entry| entry.id);
+            let geometry_output = self.output_for_geometry(geometry).map(|entry| entry.id);
+            // Scrolling rows intentionally place neighboring columns partly or
+            // wholly outside their output. Their workspace assignment is the
+            // presentation owner; geometry overlap must not migrate the window
+            // to an adjacent monitor while the row scrolls underneath a clip.
+            let output_id = scene_window_output(
+                self.window_is_layout_managed(window),
+                self.workspace_location(stable_id)
+                    .map(|location| location.output),
+                geometry_output,
+            );
             let workspace_id = output_id
                 .and_then(|output| {
                     self.reconcile_workspace_assignment(stable_id, output, minimized)
                 })
                 .map_or(-1, |location| i64::from(location.workspace));
+            let monitor_id = output_id
+                .and_then(|output| i64::try_from(output.0).ok())
+                .unwrap_or(-1);
             let (suppress_animations, server_side_decorated, window_opacity) = x11
                 .as_ref()
                 .map(|x11| {

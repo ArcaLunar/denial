@@ -449,6 +449,14 @@ impl ShmTextureFrame {
     pub(crate) fn height(&self) -> u32 {
         self.height
     }
+
+    pub(crate) fn pixels_if_single(&self) -> Option<[u8; 4]> {
+        (self.width == 1 && self.height == 1).then(|| {
+            self.pixels()
+                .try_into()
+                .expect("one RGBA pixel is four bytes")
+        })
+    }
 }
 
 #[derive(Clone)]

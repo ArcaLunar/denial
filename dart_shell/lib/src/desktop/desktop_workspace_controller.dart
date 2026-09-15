@@ -288,7 +288,12 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
           ? _maximizedFrame(current.monitorId, viewSize)
           : _clampFrame(current.frame, viewSize);
       if (frame != current.frame) {
-        _pendingNativeFrames[window.objectId] = frame;
+        // A metrics change reaches Flutter before the matching native scene
+        // snapshot. This clamp is only a safe interim presentation of the old
+        // rectangle; it was not sent to the compositor as a geometry request.
+        // Recording it as pending would reject the authoritative re-tiled
+        // rectangle when that snapshot arrives, leaving the client texture
+        // permanently stretched into this stale frame.
         next[window.objectId] = current.copyWith(frame: frame);
         changed = true;
       }
@@ -329,6 +334,12 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
             monitorId: nextOverview.monitorId,
             bounds: nextOverview.bounds,
             backgroundBounds: nextOverview.backgroundBounds,
+            selectedObjectId: frames.containsKey(nextOverview.selectedObjectId)
+                ? nextOverview.selectedObjectId
+                : _nearestOverviewObjectId(
+                    frames,
+                    nextOverview.frames[nextOverview.selectedObjectId]?.center,
+                  ),
             frames: frames,
           );
         }
@@ -391,6 +402,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     required Rect bounds,
     required Rect backgroundBounds,
     Set<int>? objectIds,
+    int? selectedObjectId,
   }) {
     if (state.overviewActive) {
       closeOverview();
@@ -422,6 +434,10 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     if (frames.isEmpty) {
       return;
     }
+    final fallbackSelection = items
+        .where((item) => frames.containsKey(item.objectId))
+        .reduce((left, right) => left.z >= right.z ? left : right)
+        .objectId;
 
     state = state.copyWith(
       placements: settledPlacements,
@@ -430,9 +446,31 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         monitorId: monitorId,
         bounds: bounds,
         backgroundBounds: backgroundBounds,
+        selectedObjectId: frames.containsKey(selectedObjectId)
+            ? selectedObjectId!
+            : fallbackSelection,
         frames: frames,
       ),
     );
+  }
+
+  bool moveOverviewSelection(DesktopOverviewDirection direction) {
+    final overview = state.overview;
+    if (overview == null) {
+      return false;
+    }
+    final selectedObjectId = desktopOverviewNeighbor(
+      frames: overview.frames,
+      fromObjectId: overview.selectedObjectId,
+      direction: direction,
+    );
+    if (selectedObjectId == null) {
+      return false;
+    }
+    state = state.copyWith(
+      overview: overview.copyWith(selectedObjectId: selectedObjectId),
+    );
+    return true;
   }
 
   void closeOverview() {
@@ -481,14 +519,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     }
     final frames = Map<int, Rect>.of(overview.frames);
     frames[objectId] = _clampFrame(previewFrame.shift(delta), state.viewSize);
-    state = state.copyWith(
-      overview: DesktopOverviewState(
-        monitorId: overview.monitorId,
-        bounds: overview.bounds,
-        backgroundBounds: overview.backgroundBounds,
-        frames: frames,
-      ),
-    );
+    state = state.copyWith(overview: overview.copyWith(frames: frames));
   }
 
   bool endOverviewDrag(
@@ -593,13 +624,22 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     next[objectId] = placement.copyWith(z: origin?.z, dragging: false);
     state = state.copyWith(
       placements: next,
-      overview: DesktopOverviewState(
-        monitorId: overview.monitorId,
-        bounds: overview.bounds,
-        backgroundBounds: overview.backgroundBounds,
-        frames: frames,
-      ),
+      overview: overview.copyWith(frames: frames),
     );
+  }
+
+  int _nearestOverviewObjectId(Map<int, Rect> frames, Offset? origin) {
+    if (origin == null) {
+      return frames.keys.first;
+    }
+    return frames.entries.reduce((left, right) {
+      final leftDistance = (left.value.center - origin).distanceSquared;
+      final rightDistance = (right.value.center - origin).distanceSquared;
+      if (leftDistance != rightDistance) {
+        return leftDistance < rightDistance ? left : right;
+      }
+      return left.key < right.key ? left : right;
+    }).key;
   }
 
   void moveBy(int objectId, Offset delta) {

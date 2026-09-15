@@ -32,7 +32,96 @@ const testWindow = DenialWindow(
   scale120: 120,
 );
 
+const testWindowBeforeScaleChange = DenialWindow(
+  objectId: 8,
+  objectKind: 'xdg',
+  surfaceId: 18,
+  windowId: 28,
+  textureId: 38,
+  title: 'Scaled output window',
+  appId: 'test.scaling',
+  width: 600,
+  height: 200,
+  surfaceX: 0,
+  surfaceY: 0,
+  surfaceWidth: 600,
+  surfaceHeight: 200,
+  textureSourceX: 0,
+  textureSourceY: 0,
+  textureSourceWidth: 600,
+  textureSourceHeight: 200,
+  geometryX: 3300,
+  geometryY: 20,
+  geometryWidth: 600,
+  geometryHeight: 200,
+  monitorId: 2,
+  transform: 0,
+  scale120: 120,
+);
+
+const testWindowAfterScaleChange = DenialWindow(
+  objectId: 8,
+  objectKind: 'xdg',
+  surfaceId: 18,
+  windowId: 28,
+  textureId: 38,
+  title: 'Scaled output window',
+  appId: 'test.scaling',
+  width: 480,
+  height: 200,
+  surfaceX: 0,
+  surfaceY: 0,
+  surfaceWidth: 480,
+  surfaceHeight: 200,
+  textureSourceX: 0,
+  textureSourceY: 0,
+  textureSourceWidth: 480,
+  textureSourceHeight: 200,
+  geometryX: 1800,
+  geometryY: 20,
+  geometryWidth: 480,
+  geometryHeight: 200,
+  monitorId: 2,
+  transform: 0,
+  scale120: 150,
+);
+
 void main() {
+  test('native retiling replaces the interim metrics-change clamp', () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final workspace = container.read(desktopWorkspaceProvider.notifier);
+
+    workspace.syncWindows(
+      const [testWindowBeforeScaleChange],
+      const Size(4000, 2560),
+      1,
+      snapshotSequence: 1,
+    );
+    workspace.syncWindows(
+      const [testWindowBeforeScaleChange],
+      const Size(3000, 2560),
+      1.25,
+      snapshotSequence: 1,
+    );
+    expect(
+      container.read(desktopWorkspaceProvider).placements[8]!.contentRect,
+      isNot(testWindowBeforeScaleChange.geometry),
+    );
+
+    workspace.syncWindows(
+      const [testWindowAfterScaleChange],
+      const Size(3000, 2560),
+      1.25,
+      snapshotSequence: 2,
+    );
+
+    expect(
+      container.read(desktopWorkspaceProvider).placements[8]!.contentRect,
+      testWindowAfterScaleChange.geometry,
+    );
+  });
+
   test(
     'layout preview translates without resizing and then restores its target',
     () {

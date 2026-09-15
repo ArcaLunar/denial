@@ -319,7 +319,11 @@ enum ShellActionKind {
   WindowSwitcherPrevious(10),
   OpenSettings(11),
   Dashboard(12),
-  WorkspaceChanged(13);
+  WorkspaceChanged(13),
+  FocusLeft(14),
+  FocusRight(15),
+  FocusUp(16),
+  FocusDown(17);
 
   final int value;
   const ShellActionKind(this.value);
@@ -340,6 +344,10 @@ enum ShellActionKind {
       case 11: return ShellActionKind.OpenSettings;
       case 12: return ShellActionKind.Dashboard;
       case 13: return ShellActionKind.WorkspaceChanged;
+      case 14: return ShellActionKind.FocusLeft;
+      case 15: return ShellActionKind.FocusRight;
+      case 16: return ShellActionKind.FocusUp;
+      case 17: return ShellActionKind.FocusDown;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -348,7 +356,7 @@ enum ShellActionKind {
       value == null ? null : ShellActionKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 13;
+  static const int maxValue = 17;
   static const fb.Reader<ShellActionKind> reader = _ShellActionKindReader();
 }
 
@@ -4537,10 +4545,11 @@ class TouchpadConfiguration {
   bool get tapToClickEnabled => const fb.BoolReader().vTableGet(_bc, _bcOffset, 4, true);
   bool get naturalScrollEnabled => const fb.BoolReader().vTableGet(_bc, _bcOffset, 6, false);
   double get scrollSpeedFactor => const fb.Float64Reader().vTableGet(_bc, _bcOffset, 8, 1.0);
+  double get scrollingLayoutSwipeSpeedFactor => const fb.Float64Reader().vTableGet(_bc, _bcOffset, 10, 1.0);
 
   @override
   String toString() {
-    return 'TouchpadConfiguration{tapToClickEnabled: ${tapToClickEnabled}, naturalScrollEnabled: ${naturalScrollEnabled}, scrollSpeedFactor: ${scrollSpeedFactor}}';
+    return 'TouchpadConfiguration{tapToClickEnabled: ${tapToClickEnabled}, naturalScrollEnabled: ${naturalScrollEnabled}, scrollSpeedFactor: ${scrollSpeedFactor}, scrollingLayoutSwipeSpeedFactor: ${scrollingLayoutSwipeSpeedFactor}}';
   }
 }
 
@@ -4558,7 +4567,7 @@ class TouchpadConfigurationBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(3);
+    fbBuilder.startTable(4);
   }
 
   int addTapToClickEnabled(bool? tapToClickEnabled) {
@@ -4573,6 +4582,10 @@ class TouchpadConfigurationBuilder {
     fbBuilder.addFloat64(2, scrollSpeedFactor);
     return fbBuilder.offset;
   }
+  int addScrollingLayoutSwipeSpeedFactor(double? scrollingLayoutSwipeSpeedFactor) {
+    fbBuilder.addFloat64(3, scrollingLayoutSwipeSpeedFactor);
+    return fbBuilder.offset;
+  }
 
   int finish() {
     return fbBuilder.endTable();
@@ -4583,23 +4596,27 @@ class TouchpadConfigurationObjectBuilder extends fb.ObjectBuilder {
   final bool? _tapToClickEnabled;
   final bool? _naturalScrollEnabled;
   final double? _scrollSpeedFactor;
+  final double? _scrollingLayoutSwipeSpeedFactor;
 
   TouchpadConfigurationObjectBuilder({
     bool? tapToClickEnabled,
     bool? naturalScrollEnabled,
     double? scrollSpeedFactor,
+    double? scrollingLayoutSwipeSpeedFactor,
   })
       : _tapToClickEnabled = tapToClickEnabled,
         _naturalScrollEnabled = naturalScrollEnabled,
-        _scrollSpeedFactor = scrollSpeedFactor;
+        _scrollSpeedFactor = scrollSpeedFactor,
+        _scrollingLayoutSwipeSpeedFactor = scrollingLayoutSwipeSpeedFactor;
 
   /// Finish building, and store into the [fbBuilder].
   @override
   int finish(fb.Builder fbBuilder) {
-    fbBuilder.startTable(3);
+    fbBuilder.startTable(4);
     fbBuilder.addBool(0, _tapToClickEnabled);
     fbBuilder.addBool(1, _naturalScrollEnabled);
     fbBuilder.addFloat64(2, _scrollSpeedFactor);
+    fbBuilder.addFloat64(3, _scrollingLayoutSwipeSpeedFactor);
     return fbBuilder.endTable();
   }
 

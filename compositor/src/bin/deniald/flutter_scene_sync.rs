@@ -203,6 +203,21 @@ pub(super) fn synchronize_wayland_cursor(
             .as_mut()
             .expect("cursor publication has no Wayland frontend")
             .flutter_cursor_state(publication);
+        if let Err(error) = wire::validate_cursor_state(&state) {
+            warn!(
+                %error,
+                kind = ?state.kind,
+                surfaces = state.surfaces.len(),
+                textures = textures.len(),
+                "dropping invalid cursor wire payload"
+            );
+            events
+                .wayland
+                .as_mut()
+                .expect("rejected cursor publication lost its Wayland frontend")
+                .recycle_flutter_cursor_state(state, textures);
+            return Ok(());
+        }
         let (state, textures) = runtime.sync_cursor_state(state, textures, output)?;
         events
             .wayland

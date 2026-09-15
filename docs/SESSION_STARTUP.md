@@ -237,12 +237,16 @@ Skia/Ganesh compatibility path can select it persistently in
 `/etc/denial/session.conf`:
 
 ```sh
-DENIA_FLUTTER_RENDERER=skia
+DENIAL_FLUTTER_RENDERER=skia
 ```
 
 For a controlled one-shot session, pass `--flutter-renderer skia` through the
 launcher instead. Renderer changes take effect when the Flutter engine starts,
 so restart the Denial session after changing the machine override.
+
+Denial environment variables use the `DENIAL_*` prefix. The former `DENIA_*`
+spellings remain compatibility aliases during the transition; when both forms
+are present, the `DENIAL_*` value takes precedence.
 
 Machines whose display controller and GPU are exposed as different DRM nodes
 can select the render node independently in `/etc/denial/session.conf`:

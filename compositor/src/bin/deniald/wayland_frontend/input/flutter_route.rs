@@ -1139,6 +1139,11 @@ pub(super) fn begin_super_pointer_grab(
             location: position,
         };
         activate_client_route(state, route, serial);
+        state
+            .wayland
+            .as_mut()
+            .expect("missing Wayland frontend")
+            .set_compositor_pointer_grab_active(true);
         super::super::queue_transient_window_placement(
             state,
             &window,
@@ -1190,6 +1195,11 @@ pub(super) fn begin_super_pointer_grab(
     };
 
     activate_client_route(state, route, serial);
+    state
+        .wayland
+        .as_mut()
+        .expect("missing Wayland frontend")
+        .set_compositor_pointer_grab_active(true);
     let pointer = state
         .wayland
         .as_ref()
@@ -1249,6 +1259,11 @@ pub(super) fn begin_super_pointer_grab(
                     Focus::Clear,
                 );
             } else {
+                state
+                    .wayland
+                    .as_mut()
+                    .expect("missing Wayland frontend")
+                    .set_compositor_pointer_grab_active(false);
                 return false;
             }
         }

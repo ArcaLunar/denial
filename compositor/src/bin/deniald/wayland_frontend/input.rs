@@ -52,7 +52,7 @@ use super::super::window_grab::{
     TileSwapGrab, X11ResizeSurfaceGrab,
 };
 #[cfg(feature = "flutter")]
-use super::super::window_layout::LayoutResizeEdges;
+use super::super::window_layout::{LayoutDirection, LayoutResizeEdges};
 #[cfg(feature = "flutter")]
 use super::super::wire::{
     InputLayoutSnapshot, InputWindowRegion, WindowPlacementChange, WindowPlacementPhase,
@@ -2072,8 +2072,28 @@ pub(super) fn execute_shortcut_disposition(
         }
         ShortcutDisposition::RequestFocus(direction) => {
             #[cfg(feature = "flutter")]
-            super::window_management::focus_toplevel_in_direction(state, direction);
-            true
+            {
+                let shell_owns_scene = state
+                    .wayland
+                    .as_ref()
+                    .and_then(|frontend| frontend.input_layout.as_ref())
+                    .is_some_and(InputLayoutSnapshot::exclusive_shell);
+                if shell_owns_scene {
+                    let action = match direction {
+                        LayoutDirection::Left => super::super::wire::ShellAction::FocusLeft,
+                        LayoutDirection::Right => super::super::wire::ShellAction::FocusRight,
+                        LayoutDirection::Up => super::super::wire::ShellAction::FocusUp,
+                        LayoutDirection::Down => super::super::wire::ShellAction::FocusDown,
+                    };
+                    state.queue_shell_action(action, None);
+                    true
+                } else {
+                    super::window_management::focus_toplevel_in_direction(state, direction);
+                    true
+                }
+            }
+            #[cfg(not(feature = "flutter"))]
+            false
         }
         ShortcutDisposition::RequestSwap(direction) => {
             #[cfg(feature = "flutter")]

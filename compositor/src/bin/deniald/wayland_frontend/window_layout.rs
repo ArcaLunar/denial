@@ -16,9 +16,9 @@ use tracing::{info, warn};
 
 use super::super::window_grab::constrain_dimension;
 use super::super::window_layout::{
-    DEFAULT_SCROLLING_COLUMN_FRACTION, LayoutDirection, LayoutInsertion, LayoutPlacement,
-    LayoutResizeEdges, LayoutResizeRequest, WindowLayoutKind, create_window_layout,
-    directional_neighbor,
+    DEFAULT_SCROLLING_COLUMN_FRACTION, LayoutAxis, LayoutDirection, LayoutInsertion,
+    LayoutPlacement, LayoutResizeEdges, LayoutResizeRequest, WindowLayoutKind,
+    create_window_layout, directional_neighbor,
 };
 #[cfg(feature = "flutter")]
 use super::shell_content_geometry;
@@ -35,14 +35,27 @@ pub(crate) struct HorizontalLayoutScrollFrame {
 const TOUCHPAD_SCROLLING_TILE_SWIPE_DISTANCE: f64 = 125.0;
 
 #[cfg(feature = "flutter")]
-fn touchpad_scrolling_layout_delta(delta_x: f64, work_width: i32, gap: i32) -> f64 {
+fn touchpad_scrolling_layout_delta(
+    delta_x: f64,
+    work_extent: i32,
+    gap: i32,
+    swipe_speed_factor: f64,
+) -> f64 {
     // Libinput swipe deltas describe gesture travel, not logical scene pixels.
     // Normalize only this scrolling-layout route so 125 units of touchpad
     // travel track one default tile stride without changing device or
     // shortcut sensitivity anywhere else.
     let default_tile_stride =
-        f64::from(work_width.max(1)) * DEFAULT_SCROLLING_COLUMN_FRACTION + f64::from(gap.max(0));
-    delta_x * default_tile_stride / TOUCHPAD_SCROLLING_TILE_SWIPE_DISTANCE
+        f64::from(work_extent.max(1)) * DEFAULT_SCROLLING_COLUMN_FRACTION + f64::from(gap.max(0));
+    delta_x * default_tile_stride * swipe_speed_factor / TOUCHPAD_SCROLLING_TILE_SWIPE_DISTANCE
+}
+
+fn scrolling_layout_axis(transform: super::OutputTransform) -> LayoutAxis {
+    if transform.swaps_axes() {
+        LayoutAxis::Vertical
+    } else {
+        LayoutAxis::Horizontal
+    }
 }
 
 impl WaylandFrontend {
@@ -77,12 +90,18 @@ impl WaylandFrontend {
         &mut self,
         delta_x: f64,
     ) -> Option<HorizontalLayoutScrollFrame> {
-        let (layout_output, work_area, gap, monitor_geometry) =
+        let (layout_output, work_area, gap, monitor_geometry, axis) =
             self.horizontal_layout_scroll_context()?;
-        let delta_x = touchpad_scrolling_layout_delta(delta_x, work_area.size.w, gap);
+        let swipe_speed_factor = self.settings.touchpad().scrolling_layout_swipe_speed_factor;
+        let delta_x = touchpad_scrolling_layout_delta(
+            delta_x,
+            axis.main_extent(work_area),
+            gap,
+            swipe_speed_factor,
+        );
         if !self
             .window_layout
-            .scroll_horizontally(layout_output, work_area, gap, delta_x)
+            .scroll_horizontally(layout_output, work_area, gap, axis, delta_x)
         {
             return None;
         }
@@ -102,14 +121,22 @@ impl WaylandFrontend {
         cancelled: bool,
         projected_delta_x: Option<f64>,
     ) -> Option<HorizontalLayoutScrollFrame> {
-        let (layout_output, work_area, gap, monitor_geometry) =
+        let (layout_output, work_area, gap, monitor_geometry, axis) =
             self.horizontal_layout_scroll_context()?;
-        let projected_delta_x = projected_delta_x
-            .map(|delta_x| touchpad_scrolling_layout_delta(delta_x, work_area.size.w, gap));
+        let swipe_speed_factor = self.settings.touchpad().scrolling_layout_swipe_speed_factor;
+        let projected_delta_x = projected_delta_x.map(|delta_x| {
+            touchpad_scrolling_layout_delta(
+                delta_x,
+                axis.main_extent(work_area),
+                gap,
+                swipe_speed_factor,
+            )
+        });
         let selected = self.window_layout.finish_horizontal_scroll(
             layout_output,
             work_area,
             gap,
+            axis,
             cancelled,
             projected_delta_x,
         )?;
@@ -132,6 +159,7 @@ impl WaylandFrontend {
         Rectangle<i32, Logical>,
         i32,
         Rectangle<i32, Logical>,
+        LayoutAxis,
     )> {
         let focused = self.focused_layout_window()?;
         if !self.window_layout.contains(&focused) {
@@ -162,6 +190,7 @@ impl WaylandFrontend {
             work_area,
             self.layout_gap(),
             monitor_geometry,
+            scrolling_layout_axis(output.transform),
         ))
     }
 
@@ -570,6 +599,7 @@ impl WaylandFrontend {
         if !self.window_layout.manages_geometry() {
             return false;
         }
+        self.prepare_layout_arrangement();
         let placements = self.current_layout_placements();
 
         let mut changed = false;
@@ -623,6 +653,32 @@ impl WaylandFrontend {
             changed |= previous != target;
         }
         changed
+    }
+
+    fn prepare_layout_arrangement(&mut self) {
+        let gap = self.layout_gap();
+        let workspace_count = self.layout_workspace_count();
+        let contexts = self
+            .outputs
+            .iter()
+            .map(|output| {
+                (
+                    output.id,
+                    self.maximize_work_area(Some(&output.output), output.logical_geometry),
+                    scrolling_layout_axis(output.transform),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (output, work_area, axis) in contexts {
+            for workspace in 1..=workspace_count {
+                self.window_layout.prepare_arrange(
+                    layout_output_id(output, workspace),
+                    work_area,
+                    gap,
+                    axis,
+                );
+            }
+        }
     }
 
     fn current_layout_placements(&self) -> Vec<LayoutPlacement<ObjectId>> {
@@ -979,10 +1035,39 @@ mod tests {
 
     #[cfg(feature = "flutter")]
     #[test]
-    fn touchpad_scrolling_delta_uses_its_own_slower_travel_scale() {
-        assert_eq!(touchpad_scrolling_layout_delta(125.0, 1_000, 10), 610.0);
-        assert_eq!(touchpad_scrolling_layout_delta(-62.5, 1_000, 10), -305.0);
-        assert_eq!(touchpad_scrolling_layout_delta(100.0, 1_000, 10), 488.0);
+    fn touchpad_scrolling_delta_applies_the_configured_travel_scale() {
+        assert_eq!(
+            touchpad_scrolling_layout_delta(125.0, 1_000, 10, 1.0),
+            610.0
+        );
+        assert_eq!(
+            touchpad_scrolling_layout_delta(-62.5, 1_000, 10, 0.5),
+            -152.5
+        );
+        assert_eq!(
+            touchpad_scrolling_layout_delta(100.0, 1_000, 10, 2.0),
+            976.0
+        );
+    }
+
+    #[test]
+    fn quarter_turned_outputs_use_the_vertical_scrolling_axis() {
+        assert_eq!(
+            scrolling_layout_axis(super::super::OutputTransform::Normal),
+            LayoutAxis::Horizontal
+        );
+        assert_eq!(
+            scrolling_layout_axis(super::super::OutputTransform::Rotate180),
+            LayoutAxis::Horizontal
+        );
+        for transform in [
+            super::super::OutputTransform::Rotate90,
+            super::super::OutputTransform::Rotate270,
+            super::super::OutputTransform::Flipped90,
+            super::super::OutputTransform::Flipped270,
+        ] {
+            assert_eq!(scrolling_layout_axis(transform), LayoutAxis::Vertical);
+        }
     }
 
     #[test]

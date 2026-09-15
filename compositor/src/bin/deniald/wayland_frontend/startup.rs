@@ -242,13 +242,26 @@ impl WaylandFrontend {
             xwayland::scale_for_engine(atlas.engine_scale_120, xwayland_scale_mode);
         let xwayland_dpi = xwayland::dpi(xwayland_scale_120);
         let xwayland_args = ["-dpi".to_owned(), xwayland_dpi.to_string()];
+        let xwayland_cursor_size = settings.cursor_size();
+        let mut xwayland_environment = vec![(
+            OsString::from("XCURSOR_SIZE"),
+            OsString::from(xwayland_cursor_size.to_string()),
+        )];
+        #[cfg(feature = "flutter")]
+        if let Some(environment) = crate::xcursor_sentinel::environment() {
+            xwayland_environment.extend(
+                environment
+                    .into_iter()
+                    .map(|(name, value)| (OsString::from(name), OsString::from(value))),
+            );
+        }
         // Smithay has no pre-exec hook here. Temporarily widen this spawning
         // thread, synchronized with our guard, so Xwayland gets the app domain.
         let (xwayland, xwayland_client) = crate::cpu_scheduling::with_application_affinity(|| {
             XWayland::spawn(
                 &display_handle,
                 None,
-                std::iter::empty::<(String, String)>(),
+                xwayland_environment,
                 xwayland_args,
                 true,
                 Stdio::null(),
@@ -303,10 +316,12 @@ impl WaylandFrontend {
                             );
                             return;
                         };
-                        if let Err(error) =
-                            xwayland::publish_dpi(&mut xwm, frontend.xwayland_scale_120)
-                        {
-                            error!(%error, "could not publish Xwayland DPI settings");
+                        if let Err(error) = xwayland::publish_settings(
+                            &mut xwm,
+                            frontend.xwayland_scale_120,
+                            frontend.settings.cursor_size(),
+                        ) {
+                            error!(%error, "could not publish Xwayland settings");
                         }
                         frontend.xwm = Some(xwm);
                         match super::super::xembed_tray::XEmbedTray::start(frontend.xdisplay_name())
@@ -321,6 +336,7 @@ impl WaylandFrontend {
                             scale = xwayland::client_scale(frontend.xwayland_scale_120),
                             scale_mode = ?frontend.xwayland_scale_mode,
                             dpi = xwayland::dpi(frontend.xwayland_scale_120),
+                            cursor_size = frontend.settings.cursor_size(),
                             "Xwayland is ready"
                         );
                         state.scene_sync.mark_dirty();
@@ -465,6 +481,8 @@ impl WaylandFrontend {
             flutter_pointer_press: None,
             #[cfg(feature = "flutter")]
             clipboard_drag_active: false,
+            #[cfg(feature = "flutter")]
+            compositor_pointer_grab_active: false,
             wayland_pointer_buttons: HashSet::new(),
             #[cfg(feature = "flutter")]
             routed_pointer_target: RoutedPointerTarget::Flutter,

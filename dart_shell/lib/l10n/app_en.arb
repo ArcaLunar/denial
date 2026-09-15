@@ -2938,6 +2938,10 @@
   "@settingsTouchpadScrollSpeed": {
     "description": "Label for the continuous touchpad scroll speed slider."
   },
+  "settingsTouchpadScrollingLayoutSwipeSpeed": "Scrolling layout swipe speed",
+  "@settingsTouchpadScrollingLayoutSwipeSpeed": {
+    "description": "Label for the continuous three-finger scrolling-layout swipe speed slider."
+  },
   "settingsMousePointerSpeed": "Mouse pointer speed",
   "@settingsMousePointerSpeed": {
     "description": "Label for the mouse pointer speed slider."
@@ -3418,7 +3422,7 @@
   "@settingsLayoutTitle": {
     "description": "English UI text for settingsLayoutTitle."
   },
-  "settingsWindowLayoutDescription": "Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling arranges full-height columns in a focus-following horizontal strip.",
+  "settingsWindowLayoutDescription": "Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling follows focus along a strip that turns vertical with a quarter-turned monitor.",
   "@settingsWindowLayoutDescription": {
     "description": "Explains the available desktop window layouts."
   },
@@ -3432,7 +3436,7 @@
   },
   "settingsWindowLayoutScrolling": "Scrolling",
   "@settingsWindowLayoutScrolling": {
-    "description": "Label for the focus-following horizontal scrolling layout."
+    "description": "Label for the focus-following adaptive-axis scrolling layout."
   },
   "settingsWindowLayoutTitle": "Window layout",
   "@settingsWindowLayoutTitle": {
