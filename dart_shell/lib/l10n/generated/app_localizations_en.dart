@@ -2129,6 +2129,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTouchpadScrollSpeed => 'Finger scroll speed';
 
   @override
+  String get settingsTouchpadScrollingLayoutSwipeSpeed =>
+      'Scrolling layout swipe speed';
+
+  @override
   String get settingsMousePointerSpeed => 'Mouse pointer speed';
 
   @override
@@ -2498,7 +2502,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWindowLayoutDescription =>
-      'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling arranges full-height columns in a focus-following horizontal strip.';
+      'Stacking lets windows overlap. Tiling divides the desktop dynamically. Scrolling follows focus along a strip that turns vertical with a quarter-turned monitor.';
 
   @override
   String get settingsWindowLayoutDwindle => 'Tiling';

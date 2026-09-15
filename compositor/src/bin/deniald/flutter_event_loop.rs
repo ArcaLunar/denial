@@ -55,6 +55,14 @@ fn interactive_service_work_pending(events: &RuntimeState) -> bool {
         || !events.pending_window_events.is_empty()
 }
 
+fn output_transaction_waiting(
+    ready_output_apply: bool,
+    pending_output_apply: bool,
+    resident_geometry_reconfigure_requested: bool,
+) -> bool {
+    ready_output_apply || pending_output_apply || resident_geometry_reconfigure_requested
+}
+
 pub(super) struct FlutterEventLoopContext<'a, 'event_loop> {
     pub(super) renderer: &'a mut GlesRenderer,
     pub(super) drm: &'a mut DrmDevice,
@@ -553,9 +561,18 @@ pub(super) fn run_flutter_event_loop(
             }
             collect_flutter_output_damage(runtime, &mut frame_scheduler);
 
-            let output_apply_waiting =
-                ready_output_apply.is_some() || !events.pending_output_applies.is_empty();
-            if !output_apply_waiting && frame_limit.is_none_or(|limit| raster_frames < limit) {
+            // A resident geometry rollback can only replace Flutter's output
+            // geometry after every old-geometry target has drained. Keep the
+            // producer stopped while that rollback is pending; otherwise a
+            // continuously animated cursor can refill the target each time
+            // through the loop and starve both rollback and input forever.
+            let output_transaction_waiting = output_transaction_waiting(
+                ready_output_apply.is_some(),
+                !events.pending_output_applies.is_empty(),
+                events.resident_geometry_reconfigure_requested,
+            );
+            if !output_transaction_waiting && frame_limit.is_none_or(|limit| raster_frames < limit)
+            {
                 let frame_action = runtime.with_frame_readiness(|pending, target_available| {
                     frame_scheduler.step_with_output_readiness(frame_now, pending, |output| {
                         (scheduler.render_available(output), target_available(output))
@@ -1815,4 +1832,19 @@ pub(super) fn run_flutter_event_loop(
         "independently clocked Flutter KMS session complete"
     );
     Ok(swapchain.representative_framebuffer())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::output_transaction_waiting;
+
+    #[test]
+    fn resident_geometry_rollback_stops_frame_production_while_targets_drain() {
+        assert!(output_transaction_waiting(false, false, true));
+    }
+
+    #[test]
+    fn idle_output_transaction_does_not_stop_frame_production() {
+        assert!(!output_transaction_waiting(false, false, false));
+    }
 }
