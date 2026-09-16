@@ -350,6 +350,14 @@ fn main() {
 fn denial_main() -> Result<(), Box<dyn Error>> {
     install_legacy_denial_environment_aliases();
     let options = Options::parse()?;
+    if options.software_rendering {
+        // SAFETY: option parsing happens on the process's only thread, before
+        // libseat, Mesa, Flutter, or any Denial worker is initialized. Mesa
+        // reads this override while constructing the first GBM/EGL display.
+        unsafe {
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+        }
+    }
     #[cfg(feature = "flutter")]
     if options.wayland && options.flutter_bundle.is_some() {
         xcursor_sentinel::install()?;
@@ -372,6 +380,10 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
                 .unwrap_or_else(|_| "deniald=info,smithay=info".into()),
         )
         .init();
+
+    if options.software_rendering {
+        info!("using Mesa software rendering");
+    }
 
     if options.max_outputs == 0 {
         return Ok(());

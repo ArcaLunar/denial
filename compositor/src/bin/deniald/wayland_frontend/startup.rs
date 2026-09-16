@@ -520,8 +520,6 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             flutter_keyboard_keys: HashSet::new(),
             #[cfg(feature = "flutter")]
-            flutter_input_method_keys: HashSet::new(),
-            #[cfg(feature = "flutter")]
             shell_keyboard_keys: HashSet::new(),
             #[cfg(feature = "flutter")]
             flutter_compose,
@@ -532,8 +530,6 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             flutter_repeat_token: None,
             retired_keyboard_keys: HashSet::new(),
-            #[cfg(feature = "flutter")]
-            retired_input_method_keys: HashSet::new(),
             #[cfg(feature = "flutter")]
             minimized_windows: HashSet::new(),
             #[cfg(feature = "flutter")]

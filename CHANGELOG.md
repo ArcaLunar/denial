@@ -49,6 +49,9 @@ boundaries may change before 1.0.
 
 ### Fixed
 
+- Installed sessions now detect VMware `vmwgfx` render devices and select
+  Mesa's KMS software renderer before GBM/EGL initialization, avoiding an
+  immediate compositor abort when accelerated EGL is unavailable.
 - Switching to a workspace with no focus history now activates a visible
   window, so focused-window shortcuts work before the first pointer click.
 - Scrolling layouts now retain each workspace's active viewport, column order,

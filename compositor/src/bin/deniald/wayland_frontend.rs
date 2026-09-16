@@ -539,8 +539,6 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     flutter_keyboard_keys: HashSet<u32>,
     #[cfg(feature = "flutter")]
-    flutter_input_method_keys: HashSet<u32>,
-    #[cfg(feature = "flutter")]
     shell_keyboard_keys: HashSet<u32>,
     #[cfg(feature = "flutter")]
     flutter_compose: Option<xkb::compose::State>,
@@ -551,8 +549,6 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     flutter_repeat_token: Option<RegistrationToken>,
     retired_keyboard_keys: HashSet<u32>,
-    #[cfg(feature = "flutter")]
-    retired_input_method_keys: HashSet<u32>,
     #[cfg(feature = "flutter")]
     minimized_windows: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]

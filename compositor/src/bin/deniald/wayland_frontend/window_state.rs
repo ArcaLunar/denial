@@ -781,6 +781,7 @@ impl WaylandFrontend {
             );
         }
         self.update_window_output_membership(window);
+        self.refresh_image_copy_constraints_if_changed();
     }
 
     pub(super) fn set_window_geometry_target_preserving_authority(
@@ -813,6 +814,7 @@ impl WaylandFrontend {
         }
         self.space.relocate_element(window, target.loc);
         self.update_window_output_membership(window);
+        self.refresh_image_copy_constraints_if_changed();
     }
 
     pub(crate) fn prepare_window_interactive_resize(

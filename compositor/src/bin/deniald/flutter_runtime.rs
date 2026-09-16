@@ -42,7 +42,7 @@ use smithay::backend::input::{
 use smithay::backend::libinput::LibinputInputBackend;
 use smithay::backend::renderer::gles::ffi as gl;
 use smithay::backend::renderer::utils::Buffer as RendererBufferGuard;
-use smithay::input::keyboard::{KeysymHandle, ModifiersState};
+use smithay::input::keyboard::ModifiersState;
 use smithay::reexports::calloop::channel::Sender;
 use smithay::utils::{Logical, Size};
 use tracing::{debug, error, info, warn};

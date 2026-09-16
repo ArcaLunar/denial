@@ -36,6 +36,13 @@ Load the packaged Flutter shell bundle from
 .BI \-\-flutter-renderer " skia|impeller"
 Select the Flutter GLES renderer. Impeller is the default.
 .TP
+.B \-\-software-rendering
+Set Mesa's
+.B LIBGL_ALWAYS_SOFTWARE=1
+before initializing GBM, EGL, or Flutter. The installed session launcher uses
+this compatibility path automatically for VMware
+.BR vmwgfx .
+.TP
 .B \-\-start-locked
 Initialize the native authentication gate and Flutter lock screen as locked.
 .TP
@@ -62,6 +69,11 @@ Override an output position for this invocation.
 Additional reconfiguration and topology-test options are listed by
 .BR "deniald --help" .
 .SH ENVIRONMENT
+.TP
+.B LIBGL_ALWAYS_SOFTWARE
+Control Mesa's hardware or software renderer selection. The
+.B \-\-software-rendering
+option sets this to 1 before graphics initialization.
 .TP
 .B DENIAL_NO_PREDECESSOR=1
 Force the session-handoff KMS path without capturing a predecessor framebuffer.

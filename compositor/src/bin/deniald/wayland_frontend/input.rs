@@ -313,10 +313,9 @@ pub(crate) fn dispatch_shell_keyboard(
             frontend.start_time.elapsed().as_millis() as u32,
         )
     };
-    // Do not gate the shared router on Wayland seat focus. Secure lock
-    // deliberately clears client focus, and process_keyboard_transition()
-    // routes that same focusless stream to Flutter just as it does for a
-    // physical keyboard.
+    // Do not gate the shared router on a focused Wayland surface. Flutter is a
+    // first-class seat focus target, so software and physical keyboards both
+    // use process_keyboard_transition() and the same seat dispatch.
     match command {
         super::super::wire::KeyboardCommand::DismissPanel { activation_serial } => {
             let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
@@ -589,14 +588,6 @@ impl PointerMotionTarget {
     }
 }
 
-#[cfg(feature = "flutter")]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum FlutterKeyDisposition {
-    Forward,
-    Dispatch,
-    ConsumeRetired,
-}
-
 #[derive(Clone, Copy, Debug, Default)]
 struct InputDeviceReset {
     keyboard: bool,
@@ -656,48 +647,6 @@ pub(super) fn retire_flutter_generation_keys(
     retired: &mut HashSet<u32>,
 ) {
     retired.extend(active.drain());
-}
-
-#[cfg(feature = "flutter")]
-fn route_flutter_key_transition(
-    active: &mut HashSet<u32>,
-    retired: &mut HashSet<u32>,
-    keycode: u32,
-    state: KeyState,
-    capture_new_press: bool,
-) -> FlutterKeyDisposition {
-    if retired_key_consumes_transition(retired, keycode, state) {
-        if state == KeyState::Released {
-            active.remove(&keycode);
-        }
-        return FlutterKeyDisposition::ConsumeRetired;
-    }
-    match state {
-        KeyState::Pressed if active.contains(&keycode) || capture_new_press => {
-            active.insert(keycode);
-            FlutterKeyDisposition::Dispatch
-        }
-        KeyState::Pressed => FlutterKeyDisposition::Forward,
-        KeyState::Released if active.remove(&keycode) => FlutterKeyDisposition::Dispatch,
-        KeyState::Released => FlutterKeyDisposition::Forward,
-    }
-}
-
-#[cfg(feature = "flutter")]
-fn route_input_method_key_transition(
-    active: &mut HashSet<u32>,
-    retired: &mut HashSet<u32>,
-    keycode: u32,
-    state: KeyState,
-    flutter_editor_active: bool,
-) -> FlutterKeyDisposition {
-    route_flutter_key_transition(
-        active,
-        retired,
-        keycode,
-        state,
-        flutter_editor_active && matches!(state, KeyState::Pressed),
-    )
 }
 
 #[cfg(feature = "flutter")]
@@ -1603,18 +1552,6 @@ fn reset_input_devices(state: &mut RuntimeState, reset: InputDeviceReset) {
         }
     }
 
-    #[cfg(feature = "flutter")]
-    let active_flutter_keys = if reset.keyboard {
-        std::mem::take(&mut frontend.flutter_keyboard_keys)
-    } else {
-        HashSet::new()
-    };
-    #[cfg(feature = "flutter")]
-    let active_input_method_keys = if reset.keyboard {
-        std::mem::take(&mut frontend.flutter_input_method_keys)
-    } else {
-        HashSet::new()
-    };
     if reset.keyboard {
         frontend.shell_keyboard_keys.clear();
     }
@@ -1627,14 +1564,6 @@ fn reset_input_devices(state: &mut RuntimeState, reset: InputDeviceReset) {
         for keycode in keyboard.pressed_keys() {
             frontend.retired_keyboard_keys.insert(keycode.raw());
         }
-        #[cfg(feature = "flutter")]
-        frontend
-            .retired_keyboard_keys
-            .extend(active_flutter_keys.iter().copied());
-        #[cfg(feature = "flutter")]
-        frontend
-            .retired_input_method_keys
-            .extend(active_input_method_keys.iter().copied());
     }
     if let Some(pointer) = pointer {
         let had_buttons = !pointer_buttons.is_empty();
@@ -1670,12 +1599,6 @@ fn reset_input_devices(state: &mut RuntimeState, reset: InputDeviceReset) {
         pressed_keys.sort_unstable_by_key(|keycode| keycode.raw());
         for keycode in pressed_keys {
             let raw_keycode = keycode.raw();
-            #[cfg(feature = "flutter")]
-            let was_flutter = active_flutter_keys.contains(&raw_keycode);
-            #[cfg(feature = "flutter")]
-            let was_flutter_input_method = active_input_method_keys.contains(&raw_keycode);
-            #[cfg(not(feature = "flutter"))]
-            let was_flutter = false;
             let was_retired = previously_retired_keys.contains(&raw_keycode);
             keyboard.input::<(), _>(
                 state,
@@ -1683,16 +1606,8 @@ fn reset_input_devices(state: &mut RuntimeState, reset: InputDeviceReset) {
                 KeyState::Released,
                 SERIAL_COUNTER.next_serial(),
                 time,
-                move |state, modifiers, key| {
-                    #[cfg(not(feature = "flutter"))]
-                    let _ = (&state, &modifiers, &key);
-                    #[cfg(feature = "flutter")]
-                    if (was_flutter || was_flutter_input_method) && state.flutter_active {
-                        state
-                            .flutter_input
-                            .handle_keyboard(key, KeyState::Released, modifiers);
-                    }
-                    if was_flutter || was_retired {
+                move |_, _, _| {
+                    if was_retired {
                         FilterResult::Intercept(())
                     } else {
                         FilterResult::Forward
@@ -1751,11 +1666,85 @@ fn flutter_key_repeats(key: &smithay::input::keyboard::KeysymHandle<'_>) -> bool
 }
 
 #[cfg(feature = "flutter")]
-fn retained_flutter_xkb_keycode(keycode: u32) -> Keycode {
-    // flutter_keyboard_keys retains Smithay/XKB keycodes, which already
-    // include XKB's evdev + 8 offset. Replay that value unchanged; adding the
-    // offset again turns XKB Backspace (22) into XKB U (30).
-    Keycode::new(keycode)
+fn flutter_modifiers_for_key(
+    key: &smithay::input::keyboard::KeysymHandle<'_>,
+) -> smithay::input::keyboard::ModifiersState {
+    let xkb = key.xkb().lock().unwrap();
+    let mut modifiers = smithay::input::keyboard::ModifiersState::default();
+    // SAFETY: the state reference remains inside the XKB mutex guard.
+    modifiers.update_with(unsafe { xkb.state() });
+    modifiers
+}
+
+/// Deliver a seat keyboard event whose real focus target is the compositor's
+/// Flutter shell.
+///
+/// This is the sole Flutter hardware-key delivery point. Physical keys and
+/// keys returned by an input method both arrive here through Smithay's seat.
+#[cfg(feature = "flutter")]
+pub(super) fn dispatch_focused_flutter_key(
+    state: &mut RuntimeState,
+    key: smithay::input::keyboard::KeysymHandle<'_>,
+    key_state: KeyState,
+) {
+    let raw_keycode = key.raw_code().raw();
+    let (dispatch, input_method_owns_repeat) = {
+        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let dispatch = match key_state {
+            KeyState::Pressed => {
+                frontend.flutter_keyboard_keys.insert(raw_keycode);
+                true
+            }
+            KeyState::Released => frontend.flutter_keyboard_keys.remove(&raw_keycode),
+        };
+        (dispatch, frontend.input_method.flutter_editor_active())
+    };
+    if !dispatch || !state.flutter_active {
+        return;
+    }
+
+    let repeatable = matches!(key_state, KeyState::Pressed) && flutter_key_repeats(&key);
+    let unicode = if matches!(key_state, KeyState::Pressed) {
+        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        flutter_unicode_for_keysym(frontend.flutter_compose.as_mut(), key.modified_sym())
+    } else {
+        key.modified_sym().key_char().map(u32::from).unwrap_or(0)
+    };
+    let modifiers = flutter_modifiers_for_key(&key);
+    state
+        .flutter_input
+        .handle_keyboard_with_unicode(raw_keycode, key_state, &modifiers, unicode);
+    if repeatable && !input_method_owns_repeat {
+        start_flutter_repeat(state, raw_keycode);
+    } else if matches!(key_state, KeyState::Released)
+        && state
+            .wayland
+            .as_ref()
+            .is_some_and(|frontend| frontend.flutter_repeat_key == Some(raw_keycode))
+    {
+        cancel_flutter_repeat(state);
+    }
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn leave_focused_flutter_keyboard(state: &mut RuntimeState) {
+    cancel_flutter_repeat(state);
+    let mut keys = {
+        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        std::mem::take(&mut frontend.flutter_keyboard_keys)
+            .into_iter()
+            .collect::<Vec<_>>()
+    };
+    keys.sort_unstable();
+    let modifiers = smithay::input::keyboard::ModifiersState::default();
+    for keycode in keys {
+        state.flutter_input.handle_keyboard_with_unicode(
+            keycode,
+            KeyState::Released,
+            &modifiers,
+            0,
+        );
+    }
 }
 
 #[cfg(feature = "flutter")]
@@ -1830,74 +1819,19 @@ fn dispatch_flutter_repeat(state: &mut RuntimeState, keycode: u32) -> bool {
     if !owned {
         return false;
     }
-    let xkb_keycode = retained_flutter_xkb_keycode(keycode);
-    let keysym = keyboard.with_xkb_state(state, |context| {
-        let xkb = context.xkb().lock().unwrap();
-        // SAFETY: the state reference remains inside the XKB mutex guard.
-        unsafe { xkb.state() }.key_get_one_sym(xkb_keycode)
-    });
-    let modifiers = keyboard.modifier_state();
-    let unicode = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-        flutter_unicode_for_keysym(frontend.flutter_compose.as_mut(), keysym)
-    };
-    state.flutter_input.handle_keyboard_with_unicode(
-        xkb_keycode.raw(),
+    let time = state
+        .wayland
+        .as_ref()
+        .map(|frontend| frontend.start_time.elapsed().as_millis() as u32)
+        .unwrap_or_default();
+    keyboard.input_forward(
+        state,
+        Keycode::new(keycode),
         KeyState::Pressed,
-        &modifiers,
-        unicode,
+        SERIAL_COUNTER.next_serial(),
+        time,
+        false,
     );
-    true
-}
-
-/// Deliver a key returned by the external input method to its Flutter editor.
-///
-/// The physical transition has already updated Smithay's XKB state before the
-/// input-method grab received it. A modifier state explicitly supplied by the
-/// companion virtual keyboard takes precedence for the replayed Flutter event,
-/// without replacing that physical state or re-entering the grab. Keys not
-/// owned by Flutter remain on the ordinary virtual-keyboard path.
-#[cfg(feature = "flutter")]
-pub(super) fn dispatch_input_method_key_to_flutter(
-    state: &mut RuntimeState,
-    keyboard: &KeyboardHandle<RuntimeState>,
-    keycode: Keycode,
-    key_state: KeyState,
-    flutter_editor_active: bool,
-    virtual_modifiers: Option<smithay::input::keyboard::ModifiersState>,
-) -> bool {
-    let disposition = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-        route_input_method_key_transition(
-            &mut frontend.flutter_input_method_keys,
-            &mut frontend.retired_input_method_keys,
-            keycode.raw(),
-            key_state,
-            state.flutter_active && flutter_editor_active,
-        )
-    };
-    match disposition {
-        FlutterKeyDisposition::Forward => return false,
-        FlutterKeyDisposition::ConsumeRetired => return true,
-        FlutterKeyDisposition::Dispatch if !state.flutter_active => return true,
-        FlutterKeyDisposition::Dispatch => {}
-    }
-
-    let keysym = keyboard.with_xkb_state(state, |context| {
-        let xkb = context.xkb().lock().unwrap();
-        // SAFETY: the state reference remains inside the XKB mutex guard.
-        unsafe { xkb.state() }.key_get_one_sym(keycode)
-    });
-    let modifiers = virtual_modifiers.unwrap_or_else(|| keyboard.modifier_state());
-    let unicode = if matches!(key_state, KeyState::Pressed) {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-        flutter_unicode_for_keysym(frontend.flutter_compose.as_mut(), keysym)
-    } else {
-        keysym.key_char().map(u32::from).unwrap_or(0)
-    };
-    state
-        .flutter_input
-        .handle_keyboard_with_unicode(keycode.raw(), key_state, &modifiers, unicode);
     true
 }
 
@@ -2453,7 +2387,6 @@ fn process_flutter_keyboard_transition(
     time: u32,
 ) -> bool {
     let secure_locked = state.secure_session_locked();
-    let raw_keycode = keycode.raw();
     let keyboard = state
         .wayland
         .as_ref()
@@ -2461,59 +2394,31 @@ fn process_flutter_keyboard_transition(
         .seat
         .get_keyboard()
         .expect("seat has no keyboard");
-    let keyboard_grabbed = keyboard.is_grabbed();
-    let disposition = {
+    let consume_retired = {
         let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-        let capture_new_press = matches!(key_state, KeyState::Pressed)
-            && (secure_locked
-                || (frontend.text_input.shell_captures_keyboard() && !keyboard_grabbed));
-        route_flutter_key_transition(
-            &mut frontend.flutter_keyboard_keys,
+        retired_key_consumes_transition(
             &mut frontend.retired_keyboard_keys,
-            raw_keycode,
+            keycode.raw(),
             key_state,
-            capture_new_press,
         )
     };
+    let secure_route_invalid = secure_locked
+        && !matches!(
+            keyboard.current_focus(),
+            Some(super::focus::KeyboardFocusTarget::Flutter)
+        );
     keyboard.input::<(), _>(
         state,
         keycode,
         key_state,
         SERIAL_COUNTER.next_serial(),
         time,
-        move |state, modifiers, key| match disposition {
-            FlutterKeyDisposition::Dispatch => {
-                let repeatable =
-                    matches!(key_state, KeyState::Pressed) && flutter_key_repeats(&key);
-                let unicode = if matches!(key_state, KeyState::Pressed) {
-                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-                    flutter_unicode_for_keysym(
-                        frontend.flutter_compose.as_mut(),
-                        key.modified_sym(),
-                    )
-                } else {
-                    key.modified_sym().key_char().map(u32::from).unwrap_or(0)
-                };
-                state.flutter_input.handle_keyboard_with_unicode(
-                    key.raw_code().raw(),
-                    key_state,
-                    modifiers,
-                    unicode,
-                );
-                if repeatable {
-                    start_flutter_repeat(state, raw_keycode);
-                } else if matches!(key_state, KeyState::Released)
-                    && state
-                        .wayland
-                        .as_ref()
-                        .is_some_and(|frontend| frontend.flutter_repeat_key == Some(raw_keycode))
-                {
-                    cancel_flutter_repeat(state);
-                }
+        move |_, _, _| {
+            if consume_retired || secure_route_invalid {
                 FilterResult::Intercept(())
+            } else {
+                FilterResult::Forward
             }
-            FlutterKeyDisposition::ConsumeRetired => FilterResult::Intercept(()),
-            FlutterKeyDisposition::Forward => FilterResult::Forward,
         },
     );
     synchronize_active_keyboard_layout(state, &keyboard);

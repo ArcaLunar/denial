@@ -16,11 +16,18 @@ use super::super::RuntimeState;
 /// Forwarding keyboard focus directly to the associated `wl_surface` is
 /// enough for `wl_keyboard`, but bypasses `X11Surface::enter` and therefore
 /// never performs the ICCCM `SetInputFocus`/`WM_TAKE_FOCUS` handshake.
+///
+/// Flutter is compositor-owned rather than a Wayland client, but it is still
+/// a seat keyboard target. Keeping it in the same focus graph is important:
+/// input-method grabs can then return unhandled keys through the seat instead
+/// of relying on a parallel focusless delivery path.
 #[derive(Clone, Debug, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum KeyboardFocusTarget {
     Wayland(WlSurface),
     X11(X11Surface),
+    #[cfg(feature = "flutter")]
+    Flutter,
 }
 
 impl From<WlSurface> for KeyboardFocusTarget {
@@ -35,6 +42,10 @@ impl From<PopupKind> for KeyboardFocusTarget {
     }
 }
 
+// Smithay's popup-grab API requires the pointer focus type to be infallibly
+// constructible from the keyboard focus type. Popup grabs only contain
+// client-owned targets; the compositor-owned Flutter target never crosses
+// that boundary.
 impl From<KeyboardFocusTarget> for WlSurface {
     fn from(target: KeyboardFocusTarget) -> Self {
         match target {
@@ -42,6 +53,10 @@ impl From<KeyboardFocusTarget> for WlSurface {
             KeyboardFocusTarget::X11(surface) => surface
                 .wl_surface()
                 .expect("focused X11 window has no associated wl_surface"),
+            #[cfg(feature = "flutter")]
+            KeyboardFocusTarget::Flutter => {
+                unreachable!("Flutter keyboard focus cannot become a client popup focus")
+            }
         }
     }
 }
@@ -51,15 +66,8 @@ impl IsAlive for KeyboardFocusTarget {
         match self {
             Self::Wayland(surface) => surface.alive(),
             Self::X11(surface) => surface.alive(),
-        }
-    }
-}
-
-impl KeyboardFocusTarget {
-    fn inner(&self) -> &dyn KeyboardTarget<RuntimeState> {
-        match self {
-            Self::Wayland(surface) => surface,
-            Self::X11(surface) => surface,
+            #[cfg(feature = "flutter")]
+            Self::Flutter => true,
         }
     }
 }
@@ -72,11 +80,21 @@ impl KeyboardTarget<RuntimeState> for KeyboardFocusTarget {
         keys: Vec<KeysymHandle<'_>>,
         serial: Serial,
     ) {
-        self.inner().enter(seat, data, keys, serial);
+        match self {
+            Self::Wayland(surface) => KeyboardTarget::enter(surface, seat, data, keys, serial),
+            Self::X11(surface) => KeyboardTarget::enter(surface, seat, data, keys, serial),
+            #[cfg(feature = "flutter")]
+            Self::Flutter => {}
+        }
     }
 
     fn leave(&self, seat: &Seat<RuntimeState>, data: &mut RuntimeState, serial: Serial) {
-        self.inner().leave(seat, data, serial);
+        match self {
+            Self::Wayland(surface) => KeyboardTarget::leave(surface, seat, data, serial),
+            Self::X11(surface) => KeyboardTarget::leave(surface, seat, data, serial),
+            #[cfg(feature = "flutter")]
+            Self::Flutter => super::input::leave_focused_flutter_keyboard(data),
+        }
     }
 
     fn key(
@@ -88,7 +106,12 @@ impl KeyboardTarget<RuntimeState> for KeyboardFocusTarget {
         serial: Serial,
         time: u32,
     ) {
-        self.inner().key(seat, data, key, state, serial, time);
+        match self {
+            Self::Wayland(surface) => surface.key(seat, data, key, state, serial, time),
+            Self::X11(surface) => surface.key(seat, data, key, state, serial, time),
+            #[cfg(feature = "flutter")]
+            Self::Flutter => super::input::dispatch_focused_flutter_key(data, key, state),
+        }
     }
 
     fn modifiers(
@@ -98,7 +121,12 @@ impl KeyboardTarget<RuntimeState> for KeyboardFocusTarget {
         modifiers: ModifiersState,
         serial: Serial,
     ) {
-        self.inner().modifiers(seat, data, modifiers, serial);
+        match self {
+            Self::Wayland(surface) => surface.modifiers(seat, data, modifiers, serial),
+            Self::X11(surface) => surface.modifiers(seat, data, modifiers, serial),
+            #[cfg(feature = "flutter")]
+            Self::Flutter => {}
+        }
     }
 }
 
@@ -107,6 +135,8 @@ impl WaylandFocus for KeyboardFocusTarget {
         match self {
             Self::Wayland(surface) => Some(Cow::Borrowed(surface)),
             Self::X11(surface) => surface.wl_surface().map(Cow::Owned),
+            #[cfg(feature = "flutter")]
+            Self::Flutter => None,
         }
     }
 }
@@ -170,26 +200,28 @@ pub(in super::super) fn suspend_keyboard_focus_for_shell(state: &mut RuntimeStat
         .seat
         .get_keyboard()
         .expect("seat has no keyboard");
-    let focus = keyboard.current_focus().filter(IsAlive::alive);
+    let focus = keyboard
+        .current_focus()
+        .filter(|focus| focus.alive() && !matches!(focus, KeyboardFocusTarget::Flutter));
     state
         .wayland
         .as_mut()
         .expect("missing Wayland frontend")
         .shell_keyboard_focus = focus;
 
-    clear_keyboard_focus(
+    keyboard.set_focus(
         state,
-        &keyboard,
+        Some(KeyboardFocusTarget::Flutter),
         smithay::utils::SERIAL_COUNTER.next_serial(),
     );
-    if keyboard.current_focus().is_some() {
+    if keyboard.current_focus() != Some(KeyboardFocusTarget::Flutter) {
         // Popup grabs intentionally reject ordinary focus changes. Shell
         // capture is a compositor focus transfer, so retire such a grab and
-        // complete the same leave sequence.
+        // complete the same seat-focus transition.
         keyboard.unset_grab(state);
-        clear_keyboard_focus(
+        keyboard.set_focus(
             state,
-            &keyboard,
+            Some(KeyboardFocusTarget::Flutter),
             smithay::utils::SERIAL_COUNTER.next_serial(),
         );
     }
@@ -211,7 +243,10 @@ pub(in super::super) fn restore_shell_keyboard_focus(state: &mut RuntimeState) {
         .shell_keyboard_focus
         .take()
         .filter(IsAlive::alive);
-    if keyboard.current_focus().is_none() {
+    if matches!(
+        keyboard.current_focus(),
+        None | Some(KeyboardFocusTarget::Flutter)
+    ) {
         request_keyboard_focus(
             state,
             &keyboard,

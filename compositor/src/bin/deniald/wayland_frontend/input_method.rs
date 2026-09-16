@@ -653,7 +653,7 @@ impl InputMethodManager {
         self.active_editor_ref().cloned()
     }
 
-    fn flutter_editor_active(&self) -> bool {
+    pub(super) fn flutter_editor_active(&self) -> bool {
         self.active_editor_ref()
             .is_some_and(|editor| matches!(&editor.endpoint, EditorEndpoint::Flutter { .. }))
     }
@@ -776,7 +776,6 @@ pub(super) struct InputMethodKeyboardUserData {
 pub(super) struct VirtualKeyboardUserData {
     accepted: bool,
     keymap_ready: AtomicBool,
-    modifiers: Mutex<Option<ModifiersState>>,
 }
 
 impl VirtualKeyboardUserData {
@@ -784,26 +783,11 @@ impl VirtualKeyboardUserData {
         Self {
             accepted,
             keymap_ready: AtomicBool::new(false),
-            modifiers: Mutex::new(None),
         }
     }
 
     fn ready(&self) -> bool {
         self.keymap_ready.load(Ordering::Acquire)
-    }
-
-    fn modifiers(&self) -> Option<ModifiersState> {
-        *self
-            .modifiers
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn set_modifiers(&self, modifiers: ModifiersState) {
-        *self
-            .modifiers
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(modifiers);
     }
 }
 
@@ -819,12 +803,11 @@ fn forward_virtual_modifiers(
     keyboard: &KeyboardHandle<RuntimeState>,
     state: &mut RuntimeState,
     serialized: SerializedMods,
-) -> ModifiersState {
+) {
     // The companion virtual keyboard uses the keymap Denial supplied to the
-    // input-method grab, so its modifier indices are compatible with the
-    // physical seat. Decode the masks in an isolated XKB state: the result is
-    // needed by Flutter key events, but must not replace the compositor-owned
-    // physical state or a disappearing input method could strand a modifier.
+    // input-method grab, so its modifier indices are compatible with the seat.
+    // Decode its masks in an isolated XKB state and publish them to the seat's
+    // current focus without replacing the compositor-owned physical state.
     let modifiers = keyboard.with_xkb_state(state, |context| {
         let xkb = context.xkb().lock().unwrap();
         // SAFETY: the keymap is borrowed only while the XKB mutex is held.
@@ -852,7 +835,6 @@ fn forward_virtual_modifiers(
     {
         focus.modifiers(&seat, state, modifiers, SERIAL_COUNTER.next_serial());
     }
-    modifiers
 }
 
 impl GlobalDispatch<ZwpVirtualKeyboardManagerV1, ()> for RuntimeState {
@@ -959,33 +941,19 @@ impl Dispatch<ZwpVirtualKeyboardV1, VirtualKeyboardUserData> for RuntimeState {
                     warn!(key, "discarding out-of-range virtual-keyboard keycode");
                     return;
                 }
-                let Some((keyboard, route, flutter_editor_active)) =
-                    state.wayland.as_ref().and_then(|frontend| {
-                        frontend
-                            .input_method
-                            .accepts_virtual_keyboard(resource)
-                            .then(|| {
-                                Some((
-                                    frontend.seat.get_keyboard()?,
-                                    frontend.input_method.keyboard_route(),
-                                    frontend.input_method.flutter_editor_active(),
-                                ))
-                            })?
-                    })
-                else {
+                let Some((keyboard, route)) = state.wayland.as_ref().and_then(|frontend| {
+                    frontend
+                        .input_method
+                        .accepts_virtual_keyboard(resource)
+                        .then(|| {
+                            Some((
+                                frontend.seat.get_keyboard()?,
+                                frontend.input_method.keyboard_route(),
+                            ))
+                        })?
+                }) else {
                     return;
                 };
-                let keycode = Keycode::new(key + XKB_KEYCODE_OFFSET);
-                if super::input::dispatch_input_method_key_to_flutter(
-                    state,
-                    &keyboard,
-                    keycode,
-                    key_state,
-                    flutter_editor_active,
-                    data.modifiers(),
-                ) {
-                    return;
-                }
                 route.forward_virtual_key(&keyboard, state, key, key_state, time);
             }
             zwp_virtual_keyboard_v1::Request::Modifiers {
@@ -1008,7 +976,7 @@ impl Dispatch<ZwpVirtualKeyboardV1, VirtualKeyboardUserData> for RuntimeState {
                         .then(|| frontend.seat.get_keyboard())?
                 });
                 if let Some(keyboard) = keyboard {
-                    let modifiers = forward_virtual_modifiers(
+                    forward_virtual_modifiers(
                         &keyboard,
                         state,
                         SerializedMods {
@@ -1018,7 +986,6 @@ impl Dispatch<ZwpVirtualKeyboardV1, VirtualKeyboardUserData> for RuntimeState {
                             layout_effective: group,
                         },
                     );
-                    data.set_modifiers(modifiers);
                 }
             }
             zwp_virtual_keyboard_v1::Request::Destroy => {}

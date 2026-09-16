@@ -86,10 +86,6 @@ impl WaylandFrontend {
             &mut self.flutter_keyboard_keys,
             &mut self.retired_keyboard_keys,
         );
-        input::retire_flutter_generation_keys(
-            &mut self.flutter_input_method_keys,
-            &mut self.retired_input_method_keys,
-        );
         released_shell_focus
     }
 

@@ -1,12 +1,21 @@
 # Screenshots and screen sharing
 
-Denial advertises `ext-output-image-capture-source-v1` together with
-`ext-image-copy-capture-v1` for physical-output capture. It also retains
+Denial advertises `ext-output-image-capture-source-v1` and
+`ext-foreign-toplevel-image-capture-source-v1` together with
+`ext-image-copy-capture-v1`. The matching `ext-foreign-toplevel-list-v1`
+global enumerates mapped native Wayland and managed X11 toplevels and publishes
+their title and application ID. Denial also retains
 `zwlr-screencopy-unstable-v1` version 3 for older direct clients and explicit
-output-region capture. Both paths support `wl_shm` and XRGB8888 DMA-BUFs, and
-both share the same presentation-paced transfer pipeline: requests complete on
-a real presentation edge of the selected output, so continuous capture follows
-that output's refresh cadence instead of spinning the Wayland event loop.
+output-region capture.
+
+All capture sources support `wl_shm` and XRGB8888 DMA-BUFs. Output requests
+complete on a real presentation edge of the selected output, so continuous
+output capture follows that output's refresh cadence instead of spinning the
+Wayland event loop. A foreign-toplevel request is rendered into an isolated
+target from that toplevel's surface tree, so its pixels do not depend on
+occlusion or its position within the composed desktop. Buffer constraints are
+republished when the toplevel size or effective output scale changes, and an
+unmapped toplevel closes its foreign handle and stops its capture sessions.
 
 ## Direct capture
 
@@ -54,3 +63,5 @@ returns the monitor selected by the user without depending on layer-shell.
 - The Flutter shell currently paints its software cursor into the shared
   atlas, so captured frames include that cursor even when a client does not
   request a cursor overlay.
+- Foreign-toplevel capture contains the client-owned toplevel surface tree,
+  without Flutter-owned server decorations or the shell cursor.

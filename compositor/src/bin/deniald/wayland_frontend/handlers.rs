@@ -840,7 +840,6 @@ impl CompositorHandler for RuntimeState {
                 opaque_regions_signature(state.opaque_regions()),
             )
         });
-        #[cfg(feature = "flutter")]
         let (first_buffer, buffer_attached, buffer_removed) = {
             let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
             (
@@ -974,6 +973,7 @@ impl CompositorHandler for RuntimeState {
             while let Some(parent) = get_parent(&root) {
                 root = parent;
             }
+            let root_committed = root == *surface;
             let window = frontend.window_for_root_surface(&root);
             if let Some(window) = window {
                 #[cfg(feature = "flutter")]
@@ -1014,6 +1014,18 @@ impl CompositorHandler for RuntimeState {
                     committed_window_metadata_changed |= previous_content_geometry
                         != window.geometry()
                         || previous_target_geometry != current_target_geometry;
+                }
+                if root_committed {
+                    if buffer_removed {
+                        frontend.remove_foreign_toplevel(&root);
+                    } else {
+                        if first_buffer {
+                            frontend.announce_foreign_toplevel(&window);
+                        } else {
+                            frontend.update_foreign_toplevel(&window);
+                        }
+                        frontend.refresh_image_copy_constraints_if_changed();
+                    }
                 }
                 #[cfg(feature = "flutter")]
                 if let Some(target) = client_sized_target {
@@ -1123,6 +1135,7 @@ impl CompositorHandler for RuntimeState {
             client_state.unregister_surface(&surface.id());
         }
         let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        frontend.remove_foreign_toplevel(surface);
         frontend.remove_surface_state(surface, true);
         self.scene_sync.mark_dirty();
     }
@@ -1227,7 +1240,7 @@ impl SeatHandler for RuntimeState {
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&KeyboardFocusTarget>) {
         #[cfg(feature = "flutter")]
-        if focused.is_some() {
+        if focused.is_some_and(|focus| !matches!(focus, KeyboardFocusTarget::Flutter)) {
             self.wayland
                 .as_mut()
                 .expect("missing Wayland frontend")
@@ -1248,6 +1261,8 @@ impl SeatHandler for RuntimeState {
         let focus_kind = match focused {
             Some(KeyboardFocusTarget::Wayland(_)) => super::SeatFocusKind::Wayland,
             Some(KeyboardFocusTarget::X11(_)) => super::SeatFocusKind::Xwayland,
+            #[cfg(feature = "flutter")]
+            Some(KeyboardFocusTarget::Flutter) => super::SeatFocusKind::None,
             None => super::SeatFocusKind::None,
         };
         let input_method_changed = {
@@ -1508,11 +1523,19 @@ impl XdgShellHandler for RuntimeState {
         self.scene_sync.mark_dirty();
     }
 
-    fn app_id_changed(&mut self, _surface: ToplevelSurface) {
+    fn app_id_changed(&mut self, surface: ToplevelSurface) {
+        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        if let Some(window) = frontend.window_for_root_surface(surface.wl_surface()) {
+            frontend.update_foreign_toplevel(&window);
+        }
         self.scene_sync.mark_dirty();
     }
 
-    fn title_changed(&mut self, _surface: ToplevelSurface) {
+    fn title_changed(&mut self, surface: ToplevelSurface) {
+        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        if let Some(window) = frontend.window_for_root_surface(surface.wl_surface()) {
+            frontend.update_foreign_toplevel(&window);
+        }
         self.scene_sync.mark_dirty();
     }
 
@@ -1846,6 +1869,7 @@ impl XdgShellHandler for RuntimeState {
         // after Space has already lost the window.
         {
             let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            frontend.remove_foreign_toplevel(surface.wl_surface());
             if let Some(window) = window.as_ref() {
                 frontend.remove_window_from_layout(window, true);
             }
