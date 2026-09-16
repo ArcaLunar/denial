@@ -346,6 +346,7 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
             .map_element(window.clone(), configured.loc, true);
         frontend.update_window_output_membership(&window);
         if !override_redirect {
+            frontend.announce_foreign_toplevel(&window);
             for candidate in frontend.space.elements() {
                 let changed = candidate.set_activated(candidate == &window);
                 if changed && let Some(toplevel) = candidate.toplevel() {
@@ -459,8 +460,9 @@ fn unmap_x11_window(state: &mut RuntimeState, surface: &X11Surface) {
         if !was_layout_managed {
             frontend.remember_window_placement(&window);
         }
-        #[cfg(feature = "flutter")]
         if let Some(root) = frontend.window_root_surface(&window) {
+            frontend.remove_foreign_toplevel(&root);
+            #[cfg(feature = "flutter")]
             frontend.remove_window_output_membership(&root);
         }
         frontend.space.unmap_elem(&window);
@@ -534,6 +536,9 @@ impl XWaylandShellHandler for RuntimeState {
             // associated. The initial map cannot index a root surface in that
             // ordering, so finish the one-time membership update here.
             frontend.update_window_output_membership(&window);
+            if !surface.is_override_redirect() {
+                frontend.announce_foreign_toplevel(&window);
+            }
             frontend.reconcile_window_layout(&window);
             #[cfg(feature = "flutter")]
             frontend.configure_mobile_window(&window);
@@ -713,10 +718,17 @@ impl XwmHandler for RuntimeState {
             frontend.space.relocate_element(&element, target.loc);
         }
         frontend.update_window_output_membership(&element);
+        frontend.refresh_image_copy_constraints_if_changed();
         self.scene_sync.mark_dirty();
     }
 
     fn property_notify(&mut self, _xwm: XwmId, window: X11Surface, property: WmWindowProperty) {
+        if let Some(element) = window_for_x11(self, &window) {
+            self.wayland
+                .as_mut()
+                .expect("missing Wayland frontend")
+                .update_foreign_toplevel(&element);
+        }
         if matches!(
             property,
             WmWindowProperty::NormalHints

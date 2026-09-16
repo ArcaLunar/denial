@@ -1627,6 +1627,7 @@ pub(super) fn run_flutter_event_loop(
         }
         if let Some(frontend) = events.wayland.as_mut() {
             frontend.process_pending_dmabufs(renderer)?;
+            frontend.process_toplevel_screencopies(renderer)?;
         }
 
         if let Some(target_output) = events.pending_screenshot_selection.take() {

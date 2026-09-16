@@ -669,6 +669,8 @@ fn start_retained_drag(state: &mut RuntimeState, item_id: u64) {
 fn focused_source_identity(frontend: &WaylandFrontend) -> Option<ClipboardSourceIdentity> {
     let focus = frontend.seat.get_keyboard()?.current_focus()?;
     match focus {
+        #[cfg(feature = "flutter")]
+        KeyboardFocusTarget::Flutter => None,
         KeyboardFocusTarget::X11(surface) => {
             ClipboardSourceIdentity::bounded(surface.class(), surface.title())
         }

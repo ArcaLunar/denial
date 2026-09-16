@@ -12,7 +12,9 @@ use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_output;
 use smithay::utils::{Logical, Rectangle, Size};
 use smithay::wayland::compositor::with_states;
-use smithay::wayland::shell::xdg::{SurfaceCachedState, ToplevelSurface, XdgToplevelSurfaceData};
+use smithay::wayland::shell::xdg::{
+    SurfaceCachedState, ToplevelState, ToplevelSurface, XdgToplevelSurfaceData,
+};
 use smithay::xwayland::xwm::{WmWindowType, X11Surface};
 use tracing::warn;
 
@@ -44,6 +46,20 @@ pub(super) enum ClientStateRequestKind {
 enum ManagedWindowProtocol<'a> {
     Xdg(&'a ToplevelSurface),
     X11(&'a X11Surface),
+}
+
+fn prepare_geometry_reassertion(
+    pending: &mut ToplevelState,
+    target_size: Size<i32, Logical>,
+    exact: bool,
+) {
+    if exact {
+        pending.states.unset(xdg_toplevel::State::Resizing);
+        pending.states.unset(xdg_toplevel::State::Fullscreen);
+        pending.states.unset(xdg_toplevel::State::Maximized);
+        pending.fullscreen_output = None;
+    }
+    pending.size = Some(target_size);
 }
 
 /// A managed Denial client window after its protocol has been normalized.
@@ -381,13 +397,7 @@ impl<'a> ManagedWindow<'a> {
         match self.protocol {
             ManagedWindowProtocol::Xdg(toplevel) => {
                 toplevel.with_pending_state(|pending| {
-                    pending.states.unset(xdg_toplevel::State::Resizing);
-                    if exact {
-                        pending.states.unset(xdg_toplevel::State::Fullscreen);
-                        pending.states.unset(xdg_toplevel::State::Maximized);
-                        pending.fullscreen_output = None;
-                    }
-                    pending.size = Some(target.size);
+                    prepare_geometry_reassertion(pending, target.size, exact);
                 });
                 if toplevel.is_initial_configure_sent() {
                     toplevel.send_configure();
@@ -461,4 +471,35 @@ pub(super) fn toplevel_has_state(
             .states
             .contains(xdg_state)
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ordinary_geometry_reassertion_preserves_live_resize_state() {
+        let mut pending = ToplevelState::default();
+        pending.states.set(xdg_toplevel::State::Resizing);
+
+        prepare_geometry_reassertion(&mut pending, Size::from((900, 700)), false);
+
+        assert!(pending.states.contains(xdg_toplevel::State::Resizing));
+        assert_eq!(pending.size, Some(Size::from((900, 700))));
+    }
+
+    #[test]
+    fn exact_geometry_reassertion_clears_client_constraints() {
+        let mut pending = ToplevelState::default();
+        pending.states.set(xdg_toplevel::State::Resizing);
+        pending.states.set(xdg_toplevel::State::Fullscreen);
+        pending.states.set(xdg_toplevel::State::Maximized);
+
+        prepare_geometry_reassertion(&mut pending, Size::from((1080, 1920)), true);
+
+        assert!(!pending.states.contains(xdg_toplevel::State::Resizing));
+        assert!(!pending.states.contains(xdg_toplevel::State::Fullscreen));
+        assert!(!pending.states.contains(xdg_toplevel::State::Maximized));
+        assert_eq!(pending.size, Some(Size::from((1080, 1920))));
+    }
 }
