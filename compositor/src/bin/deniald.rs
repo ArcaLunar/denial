@@ -358,9 +358,12 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
     if options.software_rendering {
         // SAFETY: option parsing happens on the process's only thread, before
         // libseat, Mesa, Flutter, or any Denial worker is initialized. Mesa
-        // reads this override while constructing the first GBM/EGL display.
+        // reads these overrides while constructing the first GBM/EGL display.
+        // The driver override is required on GBM backends such as vmwgfx,
+        // where LIBGL_ALWAYS_SOFTWARE alone can retain the hardware DRI driver.
         unsafe {
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("MESA_LOADER_DRIVER_OVERRIDE", "kms_swrast");
         }
     }
     #[cfg(feature = "flutter")]
@@ -387,7 +390,7 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
         .init();
 
     if options.software_rendering {
-        info!("using Mesa software rendering");
+        info!(driver = "kms_swrast", "using Mesa software rendering");
     }
 
     if options.max_outputs == 0 {
