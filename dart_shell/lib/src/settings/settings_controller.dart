@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/startup_environment.dart';
 import '../models/display_layout.dart';
+import '../models/power_button_action.dart';
 import '../models/shell_popup_placement.dart';
 import '../models/suspend_mode.dart';
 import '../state/desktop_window_close_effect.dart';
@@ -440,6 +441,12 @@ class ShellSettingsController extends Notifier<ShellSettings> {
   void setIdleLockEnabled(bool value) {
     _update(
       state.copyWith(power: state.power.copyWith(idleLockEnabled: value)),
+    );
+  }
+
+  void setPowerButtonAction(PowerButtonAction value) {
+    _update(
+      state.copyWith(power: state.power.copyWith(powerButtonAction: value)),
     );
   }
 

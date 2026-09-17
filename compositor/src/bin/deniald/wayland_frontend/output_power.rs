@@ -128,6 +128,7 @@ impl WaylandFrontend {
         };
         let changed = entry.powered != powered;
         entry.powered = powered;
+        #[cfg(feature = "flutter")]
         if changed {
             self.invalidate_frame_timeline();
         }

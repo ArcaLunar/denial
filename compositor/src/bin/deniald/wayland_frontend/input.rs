@@ -48,8 +48,8 @@ use super::super::settings::KeyboardSettings;
 use super::super::settings::{MouseSettings, TouchpadSettings};
 #[cfg(feature = "flutter")]
 use super::super::window_grab::{
-    LocalFlutterWindowGrab, MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, TileResizeGrab,
-    TileSwapGrab,
+    LocalFlutterWindowGrab, MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, TileMoveGrab,
+    TileResizeGrab,
 };
 #[cfg(feature = "flutter")]
 use super::super::window_layout::{LayoutDirection, LayoutResizeEdges};
@@ -869,7 +869,7 @@ pub(in super::super) fn init_libinput(
     event_loop: &mut EventLoop<'static, RuntimeState>,
     session: LibSeatSession,
     seat_name: &str,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Libinput, Box<dyn Error>> {
     #[cfg(feature = "flutter")]
     init_joystick_activity(event_loop, session.clone())?;
     #[cfg(feature = "flutter")]
@@ -879,6 +879,10 @@ pub(in super::super) fn init_libinput(
     context
         .udev_assign_seat(seat_name)
         .map_err(|()| "libinput could not assign the active seat")?;
+    // Libinput's context survives a libseat pause, but its device descriptors
+    // do not. Keep one reference beside the event source so the session
+    // lifecycle can suspend the old descriptors and reopen them on activation.
+    let lifecycle_context = context.clone();
     let backend = LibinputBatchSource::new(LibinputInputBackend::new(context));
     event_loop
         .handle()
@@ -902,7 +906,19 @@ pub(in super::super) fn init_libinput(
                 }
             }
         })?;
-    Ok(())
+    Ok(lifecycle_context)
+}
+
+impl WaylandFrontend {
+    pub(in super::super) fn suspend_input_session(&mut self) {
+        self.libinput.suspend();
+    }
+
+    pub(in super::super) fn resume_input_session(&mut self) -> Result<(), &'static str> {
+        self.libinput
+            .resume()
+            .map_err(|()| "libinput rejected session resume")
+    }
 }
 
 #[cfg(feature = "flutter")]
@@ -1552,6 +1568,7 @@ fn reset_input_devices(state: &mut RuntimeState, reset: InputDeviceReset) {
         }
     }
 
+    #[cfg(feature = "flutter")]
     if reset.keyboard {
         frontend.shell_keyboard_keys.clear();
     }

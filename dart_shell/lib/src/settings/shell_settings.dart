@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 
 import '../models/display_layout.dart';
+import '../models/power_button_action.dart';
 import '../models/shell_popup_placement.dart';
 import '../models/suspend_mode.dart';
 import '../state/desktop_window_close_effect.dart';
@@ -477,6 +478,7 @@ class ShellLockScreenSettings {
 @immutable
 class ShellPowerSettings {
   const ShellPowerSettings({
+    this.powerButtonAction = PowerButtonAction.dpms,
     this.idleLockEnabled = true,
     this.idleLockTimeoutMinutes = 5,
     this.idleDpmsEnabled = true,
@@ -491,6 +493,7 @@ class ShellPowerSettings {
   static const int minimumIdleDpmsMinutes = minimumIdleTimeoutMinutes;
   static const int maximumIdleDpmsMinutes = maximumIdleTimeoutMinutes;
 
+  final PowerButtonAction powerButtonAction;
   final bool idleLockEnabled;
   final int idleLockTimeoutMinutes;
   final bool idleDpmsEnabled;
@@ -500,6 +503,7 @@ class ShellPowerSettings {
   final SuspendMode suspendMode;
 
   ShellPowerSettings copyWith({
+    PowerButtonAction? powerButtonAction,
     bool? idleLockEnabled,
     int? idleLockTimeoutMinutes,
     bool? idleDpmsEnabled,
@@ -509,6 +513,7 @@ class ShellPowerSettings {
     SuspendMode? suspendMode,
   }) {
     return ShellPowerSettings(
+      powerButtonAction: powerButtonAction ?? this.powerButtonAction,
       idleLockEnabled: idleLockEnabled ?? this.idleLockEnabled,
       idleLockTimeoutMinutes:
           idleLockTimeoutMinutes ?? this.idleLockTimeoutMinutes,
@@ -525,6 +530,7 @@ class ShellPowerSettings {
   @override
   bool operator ==(Object other) {
     return other is ShellPowerSettings &&
+        other.powerButtonAction == powerButtonAction &&
         other.idleLockEnabled == idleLockEnabled &&
         other.idleLockTimeoutMinutes == idleLockTimeoutMinutes &&
         other.idleDpmsEnabled == idleDpmsEnabled &&
@@ -536,6 +542,7 @@ class ShellPowerSettings {
 
   @override
   int get hashCode => Object.hash(
+    powerButtonAction,
     idleLockEnabled,
     idleLockTimeoutMinutes,
     idleDpmsEnabled,
@@ -812,7 +819,7 @@ class ShellSettings {
 
   // Blur levels are additive in schema 9. Keep emitting the derived legacy
   // sigma so older shells can read settings written by this version.
-  static const int schemaVersion = 25;
+  static const int schemaVersion = 26;
 
   final ShellLocalizationSettings localization;
   final ShellAppearanceSettings appearance;
@@ -1030,6 +1037,9 @@ class ShellSettings {
     if (power != previous.power) {
       final before = previous.power;
       final section = <String, Object?>{};
+      if (power.powerButtonAction != before.powerButtonAction) {
+        section['powerButtonAction'] = power.powerButtonAction.name;
+      }
       if (power.idleLockEnabled != before.idleLockEnabled) {
         section['idleLockEnabled'] = power.idleLockEnabled;
       }
@@ -1121,6 +1131,7 @@ class ShellSettings {
         'showSystemStatus': lockScreen.showSystemStatus,
       },
       'power': <String, Object>{
+        'powerButtonAction': power.powerButtonAction.name,
         'idleLockEnabled': power.idleLockEnabled,
         'idleLockTimeoutMinutes': power.idleLockTimeoutMinutes,
         'idleDpmsEnabled': power.idleDpmsEnabled,
@@ -1441,6 +1452,11 @@ class ShellSettings {
             : defaults.lockScreen.showSystemStatus,
       ),
       power: ShellPowerSettings(
+        powerButtonAction: _enumValue(
+          PowerButtonAction.values,
+          powerJson['powerButtonAction'],
+          defaults.power.powerButtonAction,
+        ),
         idleLockEnabled: powerJson['idleLockEnabled'] is bool
             ? powerJson['idleLockEnabled'] as bool
             : defaults.power.idleLockEnabled,

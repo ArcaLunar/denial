@@ -3,11 +3,11 @@ use super::super::render_audit_enabled;
 use super::focus::request_keyboard_focus;
 use super::window_management::{
     ManagedClientStateRequest, activate_window, apply_managed_client_state_request,
-    apply_managed_minimize, managed_client_grab_allowed,
+    managed_client_grab_allowed,
 };
 #[cfg(feature = "flutter")]
 use super::window_management::{
-    activate_topmost_window, queue_client_window_placement_for_monitor,
+    activate_topmost_window, apply_managed_minimize, queue_client_window_placement_for_monitor,
     queue_restored_window_state, queue_window_placement, release_window_focus,
 };
 use super::*;
@@ -526,6 +526,7 @@ fn install_surface_readiness_hook(surface: &WlSurface) {
             }
         };
         let Some(dmabuf) = dmabuf else {
+            #[cfg(feature = "flutter")]
             if let Some(target) = frame_target {
                 state
                     .wayland
@@ -537,6 +538,7 @@ fn install_surface_readiness_hook(surface: &WlSurface) {
         };
         let Some(client) = surface.client() else {
             warn!(surface_id = ?surface.id(), "DMA-BUF commit has no owning Wayland client");
+            #[cfg(feature = "flutter")]
             if let Some(target) = frame_target {
                 state
                     .wayland
@@ -1038,6 +1040,8 @@ impl CompositorHandler for RuntimeState {
         #[cfg(feature = "flutter")]
         let owning_toplevel = frontend.owning_toplevel_surface(surface);
         #[cfg(feature = "flutter")]
+        let owning_layer = frontend.layer_root_surface(surface).map(|(root, _)| root);
+        #[cfg(feature = "flutter")]
         let input_method_popup = frontend.input_method.popup_root_surface(surface);
         #[cfg(feature = "flutter")]
         if has_frame_callbacks {
@@ -1049,6 +1053,10 @@ impl CompositorHandler for RuntimeState {
                 frontend
                     .pending_cursor_frame_callback_roots
                     .insert(cursor_root.id());
+            } else if let Some(layer_root) = owning_layer.as_ref() {
+                frontend
+                    .pending_layer_frame_callback_roots
+                    .insert(layer_root.id());
             } else if let Some(popup_root) = input_method_popup.as_ref() {
                 frontend
                     .pending_input_method_frame_callbacks
@@ -1062,7 +1070,8 @@ impl CompositorHandler for RuntimeState {
             }
         }
         #[cfg(feature = "flutter")]
-        let has_published_owner = owning_toplevel.is_some() || input_method_popup.is_some();
+        let has_published_owner =
+            owning_toplevel.is_some() || owning_layer.is_some() || input_method_popup.is_some();
         #[cfg(feature = "flutter")]
         let published_visual_update = published_surface_commits.as_ref().is_some_and(|published| {
             published.metadata_changed || !published.buffer_surface_ids.is_empty()
@@ -1074,6 +1083,9 @@ impl CompositorHandler for RuntimeState {
             published_visual_update,
         );
         handle_xdg_commit(&mut frontend.popups, &frontend.space, surface);
+        let layer_geometry_changed = frontend.commit_layer_surface(surface);
+        #[cfg(not(feature = "flutter"))]
+        let _ = layer_geometry_changed;
         #[cfg(feature = "flutter")]
         if let Some((window, restored, target)) = restored_window_state {
             queue_restored_window_state(self, &window, restored, target);
@@ -1088,6 +1100,10 @@ impl CompositorHandler for RuntimeState {
                 WindowPlacementPhase::End,
                 WindowPlacementChange::Resize,
             );
+        }
+        #[cfg(feature = "flutter")]
+        if layer_geometry_changed {
+            self.scene_sync.mark_dirty();
         }
         #[cfg(feature = "flutter")]
         if let Some(published) = published_surface_commits {
@@ -1858,6 +1874,7 @@ impl XdgShellHandler for RuntimeState {
                     .is_some_and(|toplevel| toplevel.wl_surface() == surface.wl_surface())
             })
             .cloned();
+        #[cfg(feature = "flutter")]
         let was_focused = window
             .as_ref()
             .is_some_and(|window| release_window_focus(self, window));
@@ -1878,6 +1895,7 @@ impl XdgShellHandler for RuntimeState {
                 frontend.space.unmap_elem(&window);
             }
         }
+        #[cfg(feature = "flutter")]
         if was_focused {
             activate_topmost_window(self);
         }

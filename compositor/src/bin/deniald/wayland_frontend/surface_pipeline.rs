@@ -9,6 +9,16 @@ use std::sync::Mutex;
 struct PublishedSurfaceAlpha(Option<u32>);
 
 #[cfg(feature = "flutter")]
+const fn layer_shell_content_kind(layer: WlrLayer) -> WindowContentKind {
+    match layer {
+        WlrLayer::Background => WindowContentKind::LayerShellBackground,
+        WlrLayer::Bottom => WindowContentKind::LayerShellBottom,
+        WlrLayer::Top => WindowContentKind::LayerShellTop,
+        WlrLayer::Overlay => WindowContentKind::LayerShellOverlay,
+    }
+}
+
+#[cfg(feature = "flutter")]
 fn surface_crop_to_buffer(
     source: Rectangle<f64, Logical>,
     scale: f64,
@@ -85,6 +95,13 @@ impl WaylandFrontend {
                     .map(|output| output.output.current_scale().fractional_scale())
             })
             .or_else(|| {
+                self.layer_root_surface(surface)
+                    .and_then(|(_, output_id)| {
+                        self.outputs.iter().find(|output| output.id == output_id)
+                    })
+                    .map(|output| output.output.current_scale().fractional_scale())
+            })
+            .or_else(|| {
                 self.outputs
                     .first()
                     .map(|output| output.output.current_scale().fractional_scale())
@@ -111,7 +128,6 @@ impl WaylandFrontend {
         (output_scale / client_scale).max(1.0)
     }
 
-    #[cfg(feature = "flutter")]
     pub(super) fn owning_toplevel_surface(&self, surface: &WlSurface) -> Option<WlSurface> {
         let candidate = self.toplevel_candidate_surface(surface);
         self.space
@@ -648,11 +664,12 @@ impl WaylandFrontend {
                 self.scene_textures_scratch = textures;
                 return None;
             };
-            let expects_sample = window_expects_sample(
-                self.input_visibility_known,
-                &self.visible_window_ids,
-                window_id,
-            );
+            let expects_sample = self.scene_layer_surface_roots.contains(&window_id)
+                || window_expects_sample(
+                    self.input_visibility_known,
+                    &self.visible_window_ids,
+                    window_id,
+                );
             let Some(frame) = self.external_texture_frame(surface_id, expects_sample) else {
                 self.scene_textures_scratch = textures;
                 return None;
@@ -781,6 +798,8 @@ impl WaylandFrontend {
         surface_windows.clear();
         let mut complex_windows = std::mem::take(&mut self.scene_complex_windows_scratch);
         complex_windows.clear();
+        let mut layer_surface_roots = std::mem::take(&mut self.scene_layer_surface_roots_scratch);
+        layer_surface_roots.clear();
         let input_method_editor_rectangle = self.input_method_editor_rectangle_global();
         let input_method_popups = self.input_method.visible_popups();
         let mut window_count = 0;
@@ -1195,6 +1214,189 @@ impl WaylandFrontend {
             }
             window_count += 1;
         }
+        for output in &self.outputs {
+            let mapped_layers = {
+                let map = layer_map_for_output(&output.output);
+                map.layers()
+                    .filter_map(|layer| {
+                        map.layer_geometry(layer)
+                            .map(|geometry| (layer.clone(), geometry))
+                    })
+                    .collect::<Vec<_>>()
+            };
+            for (layer, layer_geometry) in mapped_layers {
+                if layer_geometry.size.w <= 0 || layer_geometry.size.h <= 0 {
+                    continue;
+                }
+                let surface = layer.wl_surface();
+                let Some(stable_id) = self.surface_id(surface) else {
+                    continue;
+                };
+                let (mut title, mut app_id, mut layers) = windows
+                    .get_mut(window_count)
+                    .map(|previous| {
+                        (
+                            std::mem::take(&mut previous.title),
+                            std::mem::take(&mut previous.app_id),
+                            std::mem::take(&mut previous.surfaces),
+                        )
+                    })
+                    .unwrap_or_default();
+                title.clear();
+                title.push_str(layer.namespace());
+                app_id.clear();
+                app_id.push_str(layer.namespace());
+                layers.clear();
+
+                let mut composition_order = 0;
+                self.append_surface_tree(
+                    surface,
+                    (0, 0).into(),
+                    SurfaceRoleDescription::Root,
+                    0,
+                    0,
+                    true,
+                    &mut composition_order,
+                    &mut layers,
+                    &mut textures,
+                );
+                popups.extend(PopupManager::popups_for_surface(surface));
+                popups.reverse();
+                for (popup, popup_location) in popups.drain(..) {
+                    let popup_surface = popup.wl_surface();
+                    let Some(popup_surface_id) = self.surface_id(popup_surface) else {
+                        continue;
+                    };
+                    let parent_surface_id = match &popup {
+                        PopupKind::Xdg(popup) => popup
+                            .get_parent_surface()
+                            .and_then(|parent| self.surface_id(&parent))
+                            .unwrap_or(0),
+                        PopupKind::InputMethod(_) => 0,
+                    };
+                    self.append_surface_tree(
+                        popup_surface,
+                        saturating_point_sub(popup_location, popup.geometry().loc),
+                        SurfaceRoleDescription::Popup,
+                        parent_surface_id,
+                        popup_surface_id,
+                        true,
+                        &mut composition_order,
+                        &mut layers,
+                        &mut textures,
+                    );
+                }
+                if layers.is_empty() {
+                    continue;
+                }
+                for surface_layer in &layers {
+                    if surface_layer.texture_id > 0 {
+                        surface_windows.insert(surface_layer.surface_id, stable_id);
+                    }
+                }
+                if layers.len() != 1 || layers[0].surface_id != stable_id {
+                    complex_windows.insert(stable_id);
+                }
+                layer_surface_roots.insert(stable_id);
+
+                let root_layer = layers.iter().find(|layer| layer.surface_id == stable_id);
+                let fallback_width = u32::try_from(layer_geometry.size.w)?;
+                let fallback_height = u32::try_from(layer_geometry.size.h)?;
+                let (
+                    texture_id,
+                    width,
+                    height,
+                    texture_source_x,
+                    texture_source_y,
+                    texture_source_width,
+                    texture_source_height,
+                    transform,
+                    scale_120,
+                ) = root_layer.map_or(
+                    (
+                        0,
+                        fallback_width,
+                        fallback_height,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0,
+                        120,
+                    ),
+                    |root| {
+                        (
+                            root.texture_id,
+                            if root.width > 0 {
+                                root.width
+                            } else {
+                                fallback_width
+                            },
+                            if root.height > 0 {
+                                root.height
+                            } else {
+                                fallback_height
+                            },
+                            root.texture_source_x,
+                            root.texture_source_y,
+                            root.texture_source_width,
+                            root.texture_source_height,
+                            root.transform,
+                            root.scale_120,
+                        )
+                    },
+                );
+                let local_geometry = layer.geometry();
+                let global_location =
+                    saturating_point_add(output.logical_geometry.loc, layer_geometry.loc);
+                let description = WindowDescription {
+                    object_id: stable_id,
+                    surface_id: stable_id,
+                    window_id: stable_id,
+                    texture_id,
+                    title,
+                    app_id,
+                    width,
+                    height,
+                    surface_x: f64::from(local_geometry.loc.x),
+                    surface_y: f64::from(local_geometry.loc.y),
+                    surface_width: f64::from(layer_geometry.size.w),
+                    surface_height: f64::from(layer_geometry.size.h),
+                    texture_source_x,
+                    texture_source_y,
+                    texture_source_width,
+                    texture_source_height,
+                    geometry_x: f64::from(global_location.x) - self.atlas_origin.x,
+                    geometry_y: f64::from(global_location.y) - self.atlas_origin.y,
+                    geometry_width: f64::from(layer_geometry.size.w),
+                    geometry_height: f64::from(layer_geometry.size.h),
+                    monitor_id: i64::try_from(output.id.0).unwrap_or(-1),
+                    workspace_id: -1,
+                    minimized: false,
+                    fullscreen: false,
+                    maximized: false,
+                    pinned: true,
+                    transform,
+                    scale_120,
+                    content_x: f64::from(local_geometry.loc.x),
+                    content_y: f64::from(local_geometry.loc.y),
+                    content_width: f64::from(layer_geometry.size.w),
+                    content_height: f64::from(layer_geometry.size.h),
+                    suppress_animations: true,
+                    server_side_decorated: false,
+                    opacity: 1.0,
+                    surfaces: layers,
+                    content_kind: layer_shell_content_kind(layer.layer()),
+                    opacity_class: WindowOpacityClass::ContentTranslucent,
+                };
+                if let Some(previous) = windows.get_mut(window_count) {
+                    *previous = description;
+                } else {
+                    windows.push(description);
+                }
+                window_count += 1;
+            }
+        }
         if let Some(cursor_rectangle) = input_method_editor_rectangle {
             for popup in input_method_popups {
                 let surface = popup.surface();
@@ -1348,6 +1550,11 @@ impl WaylandFrontend {
         self.scene_surface_windows_scratch = surface_windows;
         std::mem::swap(&mut self.scene_complex_windows, &mut complex_windows);
         self.scene_complex_windows_scratch = complex_windows;
+        std::mem::swap(
+            &mut self.scene_layer_surface_roots,
+            &mut layer_surface_roots,
+        );
+        self.scene_layer_surface_roots_scratch = layer_surface_roots;
         Ok((windows, textures))
     }
 

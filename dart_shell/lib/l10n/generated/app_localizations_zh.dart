@@ -1311,6 +1311,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutomaticIdleTitle => '自动空闲操作';
 
   @override
+  String get settingsPowerButtonTitle => '电源按钮';
+
+  @override
+  String get settingsPowerButtonAction => '操作';
+
+  @override
+  String get settingsPowerButtonDescription => '选择按下实体电源按钮时执行的操作。';
+
+  @override
+  String get settingsPowerButtonSuspend => '挂起';
+
+  @override
+  String get settingsPowerButtonHibernate => '休眠';
+
+  @override
+  String get settingsPowerButtonHibernateUnavailable => '休眠（不可用）';
+
+  @override
+  String get settingsPowerButtonDpms => '关闭显示器（DPMS）';
+
+  @override
+  String get settingsPowerButtonPowerOff => '关机';
+
+  @override
   String get settingsAutomaticLockToggle => '自动锁定';
 
   @override

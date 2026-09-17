@@ -14,6 +14,7 @@ fn configuration(
         dpms_timeout,
         suspend_timeout,
         suspend_mode: SuspendMode::SystemDefault,
+        power_button_action: PowerButtonAction::Dpms,
     }
 }
 
@@ -65,9 +66,26 @@ fn packet_is_versioned_bounded_ordered_and_preserves_optional_actions() {
         decode_configuration(&selected_mode).unwrap().suspend_mode,
         SuspendMode::Deep
     );
+    selected_mode[3] = PowerButtonAction::Hibernate as u8;
+    assert_eq!(
+        decode_configuration(&selected_mode)
+            .unwrap()
+            .power_button_action,
+        PowerButtonAction::Hibernate
+    );
+    let mut suspend_mode_configuration = selected_mode;
+    suspend_mode_configuration[0] = SUSPEND_MODE_CONFIGURATION_PACKET_VERSION;
+    suspend_mode_configuration[3] = 0;
+    assert_eq!(
+        decode_configuration(&suspend_mode_configuration)
+            .unwrap()
+            .power_button_action,
+        PowerButtonAction::Dpms
+    );
     let mut legacy_configuration = selected_mode;
     legacy_configuration[0] = LEGACY_CONFIGURATION_PACKET_VERSION;
     legacy_configuration[2] = 0;
+    legacy_configuration[3] = 0;
     assert_eq!(
         decode_configuration(&legacy_configuration)
             .unwrap()
@@ -78,6 +96,12 @@ fn packet_is_versioned_bounded_ordered_and_preserves_optional_actions() {
     assert!(matches!(
         decode_configuration(&selected_mode),
         Err(IdlePolicyPacketError::InvalidSuspendMode(99))
+    ));
+    selected_mode[2] = SuspendMode::SystemDefault as u8;
+    selected_mode[3] = 99;
+    assert!(matches!(
+        decode_configuration(&selected_mode),
+        Err(IdlePolicyPacketError::InvalidPowerButtonAction(99))
     ));
     assert!(matches!(
         decode_configuration(&packet(0, 0, 1, 1)),
@@ -95,6 +119,20 @@ fn packet_is_versioned_bounded_ordered_and_preserves_optional_actions() {
             milliseconds,
         }) if milliseconds == too_large
     ));
+}
+
+#[test]
+fn power_button_system_actions_map_to_logind_methods() {
+    assert_eq!(PowerButtonAction::Dpms.logind_method(), None);
+    assert_eq!(PowerButtonAction::Suspend.logind_method(), Some("Suspend"));
+    assert_eq!(
+        PowerButtonAction::Hibernate.logind_method(),
+        Some("Hibernate")
+    );
+    assert_eq!(
+        PowerButtonAction::PowerOff.logind_method(),
+        Some("PowerOff")
+    );
 }
 
 #[test]

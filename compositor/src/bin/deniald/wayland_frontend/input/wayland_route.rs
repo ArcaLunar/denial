@@ -177,15 +177,17 @@ pub(super) fn process_wayland_input_event(
                         .as_ref()
                         .expect("missing Wayland frontend")
                         .keyboard_focus_for_window(&window);
-                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-                    frontend.raise_window(&window, true);
-                    for candidate in frontend.space.elements() {
-                        let changed = candidate.set_activated(candidate == &window);
-                        if changed && let Some(toplevel) = candidate.toplevel() {
-                            toplevel.send_pending_configure();
+                    if let Some(focus) = focus {
+                        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                        frontend.raise_window(&window, true);
+                        for candidate in frontend.space.elements() {
+                            let changed = candidate.set_activated(candidate == &window);
+                            if changed && let Some(toplevel) = candidate.toplevel() {
+                                toplevel.send_pending_configure();
+                            }
                         }
+                        request_keyboard_focus(state, &keyboard, Some(focus), serial);
                     }
-                    request_keyboard_focus(state, &keyboard, focus, serial);
                 } else {
                     clear_keyboard_focus(state, &keyboard, serial);
                 }
@@ -242,15 +244,17 @@ pub(super) fn process_wayland_input_event(
                     .as_ref()
                     .expect("missing Wayland frontend")
                     .keyboard_focus_for_window(&window);
-                let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-                frontend.raise_window(&window, true);
-                for candidate in frontend.space.elements() {
-                    let changed = candidate.set_activated(candidate == &window);
-                    if changed && let Some(toplevel) = candidate.toplevel() {
-                        toplevel.send_pending_configure();
+                if let Some(focus) = focus {
+                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                    frontend.raise_window(&window, true);
+                    for candidate in frontend.space.elements() {
+                        let changed = candidate.set_activated(candidate == &window);
+                        if changed && let Some(toplevel) = candidate.toplevel() {
+                            toplevel.send_pending_configure();
+                        }
                     }
+                    request_keyboard_focus(state, &keyboard, Some(focus), serial);
                 }
-                request_keyboard_focus(state, &keyboard, focus, serial);
             } else {
                 clear_keyboard_focus(state, &keyboard, serial);
             }

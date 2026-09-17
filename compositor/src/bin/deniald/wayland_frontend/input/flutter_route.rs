@@ -972,6 +972,16 @@ pub(super) fn activate_client_route(
         .seat
         .get_keyboard()
         .expect("seat has no keyboard");
+    let Some(keyboard_focus) = state
+        .wayland
+        .as_ref()
+        .expect("missing Wayland frontend")
+        .keyboard_focus_for_window(target_window)
+    else {
+        // Client-owned popup windows still receive the pointer/touch event,
+        // but must not replace their managed owner's activation or focus.
+        return false;
+    };
     let scene_changed = {
         let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
         let mut changed = frontend.space.elements().next_back() != Some(target_window);
@@ -986,14 +996,6 @@ pub(super) fn activate_client_route(
             }
         }
         changed
-    };
-    let Some(keyboard_focus) = state
-        .wayland
-        .as_ref()
-        .expect("missing Wayland frontend")
-        .keyboard_focus_for_window(target_window)
-    else {
-        return scene_changed;
     };
     if keyboard.current_focus().as_ref() != Some(&keyboard_focus) {
         request_keyboard_focus(state, &keyboard, Some(keyboard_focus), serial);
@@ -1185,7 +1187,7 @@ pub(super) fn begin_super_pointer_grab(
         match action {
             SuperPointerAction::Move => pointer.set_grab(
                 state,
-                TileSwapGrab::new(start_data, window, geometry),
+                TileMoveGrab::new(start_data, window, geometry),
                 serial,
                 Focus::Clear,
             ),

@@ -1339,6 +1339,14 @@ class DenialWireCodec {
           DenialWindowContentKind.surfaceTree,
         generated.WindowContentKind.LocalFlutter =>
           DenialWindowContentKind.localFlutter,
+        generated.WindowContentKind.LayerShellBackground =>
+          DenialWindowContentKind.layerShellBackground,
+        generated.WindowContentKind.LayerShellBottom =>
+          DenialWindowContentKind.layerShellBottom,
+        generated.WindowContentKind.LayerShellTop =>
+          DenialWindowContentKind.layerShellTop,
+        generated.WindowContentKind.LayerShellOverlay =>
+          DenialWindowContentKind.layerShellOverlay,
       };
       if (contentKind == DenialWindowContentKind.localFlutter &&
           (window.textureId != 0 || sourceLayers.isNotEmpty)) {

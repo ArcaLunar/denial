@@ -416,7 +416,10 @@ impl WindowCloseTextureLeases {
 
 fn window_texture_map(windows: &[wire::WindowDescription]) -> HashMap<u64, Vec<i64>> {
     let mut textures = HashMap::with_capacity(windows.len());
-    for window in windows {
+    for window in windows
+        .iter()
+        .filter(|window| !window.content_kind.is_layer_shell())
+    {
         let texture_ids = if window.surfaces.is_empty() {
             i64::try_from(window.texture_id)
                 .ok()

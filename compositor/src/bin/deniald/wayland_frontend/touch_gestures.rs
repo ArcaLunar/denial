@@ -14,6 +14,7 @@ use smithay::utils::{Logical, Point, Rectangle, SERIAL_COUNTER, Size};
 use super::super::RuntimeState;
 use super::super::native_shortcut::ShortcutGesture;
 use super::super::window_grab::constrain_dimension;
+use super::super::window_layout::LayoutResizeEdges;
 use super::super::wire::{WindowGeometry, WindowPlacementChange, WindowPlacementPhase};
 use super::managed_window::ManagedWindow;
 use super::window_management;
@@ -967,6 +968,15 @@ fn apply_placement(
     else {
         return;
     };
+    if change == WindowPlacementChange::Resize
+        && state
+            .wayland
+            .as_ref()
+            .is_some_and(|frontend| frontend.window_is_layout_managed(&window))
+    {
+        apply_layout_resize_placement(state, &window, phase, geometry);
+        return;
+    }
     if phase == WindowPlacementPhase::Begin {
         let constraints_cleared = release_geometry_constraints(state, &window);
         window_management::activate_window(state, &window, SERIAL_COUNTER.next_serial());
@@ -990,6 +1000,170 @@ fn apply_placement(
     window_management::queue_window_placement(state, &window, geometry, phase, change);
     if phase == WindowPlacementPhase::End {
         state.scene_sync.mark_dirty();
+    }
+}
+
+fn apply_layout_resize_placement(
+    state: &mut RuntimeState,
+    window: &Window,
+    phase: WindowPlacementPhase,
+    geometry: WindowGeometry,
+) {
+    match phase {
+        WindowPlacementPhase::Begin => {
+            release_geometry_constraints(state, window);
+            window_management::activate_window(state, window, SERIAL_COUNTER.next_serial());
+            let geometry = state
+                .wayland
+                .as_ref()
+                .expect("missing Wayland frontend")
+                .window_geometry_target(window);
+            window_management::queue_transient_window_placement(
+                state,
+                window,
+                geometry,
+                WindowPlacementPhase::Begin,
+                WindowPlacementChange::Resize,
+            );
+        }
+        WindowPlacementPhase::Update => {
+            // Layouts deliberately override client size hints, just like the
+            // pointer-driven tile resize path. The pinch size supplies a
+            // preferred boundary delta; the layout remains the final size
+            // authority and ignores translation of the gesture center.
+            let target = layout_pinch_target_size(geometry);
+            let affected = resize_layout_window_toward(state, window, target);
+            let placements = {
+                let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
+                affected
+                    .into_iter()
+                    .map(|window| {
+                        let geometry = frontend.window_geometry_target(&window);
+                        (window, geometry)
+                    })
+                    .collect::<Vec<_>>()
+            };
+            for (affected_window, geometry) in placements {
+                window_management::queue_transient_window_placement(
+                    state,
+                    &affected_window,
+                    geometry,
+                    WindowPlacementPhase::Update,
+                    WindowPlacementChange::Resize,
+                );
+            }
+        }
+        WindowPlacementPhase::End => {
+            let placements = state
+                .wayland
+                .as_ref()
+                .expect("missing Wayland frontend")
+                .layout_window_geometries(window);
+            for (affected_window, geometry) in placements {
+                window_management::queue_transient_window_placement(
+                    state,
+                    &affected_window,
+                    geometry,
+                    WindowPlacementPhase::End,
+                    WindowPlacementChange::Resize,
+                );
+            }
+        }
+    }
+    state.scene_sync.mark_dirty();
+}
+
+fn resize_layout_window_toward(
+    state: &mut RuntimeState,
+    window: &Window,
+    target: Size<i32, Logical>,
+) -> Vec<Window> {
+    let mut affected = Vec::new();
+    for edge in [
+        LayoutPinchEdge::Right,
+        LayoutPinchEdge::Left,
+        LayoutPinchEdge::Bottom,
+        LayoutPinchEdge::Top,
+    ] {
+        let changed = {
+            let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+            let current = frontend.window_geometry_target(window);
+            let (delta_x, delta_y) = layout_pinch_delta(edge, current.size, target);
+            if delta_x == 0.0 && delta_y == 0.0 {
+                Vec::new()
+            } else {
+                frontend.resize_layout_window(window, edge.layout_edges(), delta_x, delta_y)
+            }
+        };
+        for (changed_window, _) in changed {
+            if !affected
+                .iter()
+                .any(|candidate| candidate == &changed_window)
+            {
+                affected.push(changed_window);
+            }
+        }
+    }
+    affected
+}
+
+fn layout_pinch_target_size(geometry: WindowGeometry) -> Size<i32, Logical> {
+    let geometry = constrain_local_geometry(geometry, WindowPlacementChange::Resize);
+    Size::from((
+        rounded_i32(geometry.width).max(1),
+        rounded_i32(geometry.height).max(1),
+    ))
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LayoutPinchEdge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl LayoutPinchEdge {
+    const fn layout_edges(self) -> LayoutResizeEdges {
+        match self {
+            Self::Left => LayoutResizeEdges {
+                top: false,
+                bottom: false,
+                left: true,
+                right: false,
+            },
+            Self::Right => LayoutResizeEdges {
+                top: false,
+                bottom: false,
+                left: false,
+                right: true,
+            },
+            Self::Top => LayoutResizeEdges {
+                top: true,
+                bottom: false,
+                left: false,
+                right: false,
+            },
+            Self::Bottom => LayoutResizeEdges {
+                top: false,
+                bottom: true,
+                left: false,
+                right: false,
+            },
+        }
+    }
+}
+
+fn layout_pinch_delta(
+    edge: LayoutPinchEdge,
+    current: Size<i32, Logical>,
+    target: Size<i32, Logical>,
+) -> (f64, f64) {
+    match edge {
+        LayoutPinchEdge::Left => (f64::from(current.w) - f64::from(target.w), 0.0),
+        LayoutPinchEdge::Right => (f64::from(target.w) - f64::from(current.w), 0.0),
+        LayoutPinchEdge::Top => (0.0, f64::from(current.h) - f64::from(target.h)),
+        LayoutPinchEdge::Bottom => (0.0, f64::from(target.h) - f64::from(current.h)),
     }
 }
 
@@ -1117,6 +1291,29 @@ mod tests {
             in_move_corner,
             geometry_locked,
         }
+    }
+
+    #[test]
+    fn tiled_pinch_maps_each_requested_edge_to_its_layout_boundary_delta() {
+        let current = Size::from((300, 400));
+        let target = Size::from((340, 460));
+
+        assert_eq!(
+            layout_pinch_delta(LayoutPinchEdge::Left, current, target),
+            (-40.0, 0.0)
+        );
+        assert_eq!(
+            layout_pinch_delta(LayoutPinchEdge::Right, current, target),
+            (40.0, 0.0)
+        );
+        assert_eq!(
+            layout_pinch_delta(LayoutPinchEdge::Top, current, target),
+            (0.0, -60.0)
+        );
+        assert_eq!(
+            layout_pinch_delta(LayoutPinchEdge::Bottom, current, target),
+            (0.0, 60.0)
+        );
     }
 
     #[test]

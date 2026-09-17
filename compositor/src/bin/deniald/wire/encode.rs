@@ -46,6 +46,7 @@ impl WireBridge {
         }
         let next_restored_window_ids = windows
             .iter()
+            .filter(|window| !window.content_kind.is_layer_shell())
             .filter_map(|window| {
                 restored_window_ids
                     .contains(&window.window_id)

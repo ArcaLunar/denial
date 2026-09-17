@@ -239,10 +239,12 @@ class _DesktopWindowFrame extends ConsumerWidget {
     final outputRect = outputPixelGrid?.logicalRect;
     final transformed =
         overview || switching || desktopWidget || offscreenMinimized;
-    final scrollingOutputClip =
-        windowLayout == DesktopWindowLayout.scrolling && !transformed
-        ? outputRect
-        : null;
+    final scrollingOutputClip = desktopScrollingOutputClip(
+      windowLayout: windowLayout,
+      pinned: window.pinned,
+      transformed: transformed,
+      outputRect: outputRect,
+    );
     final frame = desktopPixelAlignedWindowFrame(
       frame: liveFrame,
       contentInset: placement.frameBorder,

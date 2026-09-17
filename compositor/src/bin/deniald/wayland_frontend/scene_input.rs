@@ -280,6 +280,27 @@ impl WaylandFrontend {
             }
         }
         let callback_millis = callback_time.as_millis() as u32;
+        if !self.pending_layer_frame_callback_roots.is_empty()
+            && let Some(output) = self.outputs.iter().find(|output| output.id == tick.output)
+        {
+            let map = layer_map_for_output(&output.output);
+            for layer in map.layers() {
+                let root = layer.wl_surface();
+                if !self.pending_layer_frame_callback_roots.remove(&root.id()) {
+                    continue;
+                }
+                sent = sent.saturating_add(presentation::send_surface_frame_callbacks(
+                    root,
+                    callback_millis,
+                ));
+                for (popup, _) in PopupManager::popups_for_surface(root) {
+                    sent = sent.saturating_add(presentation::send_surface_frame_callbacks(
+                        popup.wl_surface(),
+                        callback_millis,
+                    ));
+                }
+            }
+        }
         if !self.pending_cursor_frame_callback_roots.is_empty()
             && cursor_frame_callback_matches(self.cursor_output, tick.output)
         {
@@ -326,6 +347,9 @@ impl WaylandFrontend {
     pub fn after_present(&mut self) -> Result<(), Box<dyn Error>> {
         self.presentation.presented();
         self.space.refresh();
+        for output in &self.outputs {
+            layer_map_for_output(&output.output).cleanup();
+        }
         self.popups.cleanup();
         self.display_handle.flush_clients()?;
         Ok(())

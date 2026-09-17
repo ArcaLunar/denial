@@ -1943,6 +1943,38 @@
   "@settingsAutomaticIdleTitle": {
     "description": "Title for the coordinated idle lock, display power, and suspend settings."
   },
+  "settingsPowerButtonTitle": "Power button",
+  "@settingsPowerButtonTitle": {
+    "description": "Title for physical power button behavior settings."
+  },
+  "settingsPowerButtonAction": "Action",
+  "@settingsPowerButtonAction": {
+    "description": "Label for the physical power button action selector."
+  },
+  "settingsPowerButtonDescription": "Choose what happens when you press the physical power button.",
+  "@settingsPowerButtonDescription": {
+    "description": "Explanation for the physical power button action selector."
+  },
+  "settingsPowerButtonSuspend": "Suspend",
+  "@settingsPowerButtonSuspend": {
+    "description": "Power button action that suspends the system."
+  },
+  "settingsPowerButtonHibernate": "Hibernate",
+  "@settingsPowerButtonHibernate": {
+    "description": "Power button action that hibernates the system."
+  },
+  "settingsPowerButtonHibernateUnavailable": "Hibernate (unavailable)",
+  "@settingsPowerButtonHibernateUnavailable": {
+    "description": "Disabled persisted hibernate action when hibernation is unavailable."
+  },
+  "settingsPowerButtonDpms": "Turn off displays (DPMS)",
+  "@settingsPowerButtonDpms": {
+    "description": "Power button action that toggles compositor-owned display power."
+  },
+  "settingsPowerButtonPowerOff": "Power off",
+  "@settingsPowerButtonPowerOff": {
+    "description": "Power button action that powers off the system."
+  },
   "settingsAutomaticLockToggle": "Lock automatically",
   "@settingsAutomaticLockToggle": {
     "description": "Toggle for automatically locking the session after inactivity."

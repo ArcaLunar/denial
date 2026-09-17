@@ -444,6 +444,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
   const _DesktopScene({
     required this.viewSize,
     required this.windows,
+    required this.layerSurfaces,
     required this.desktop,
     required this.closeEffect,
     required this.minimizedWindowPlacement,
@@ -481,6 +482,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
 
   final Size viewSize;
   final List<DenialWindow> windows;
+  final List<DenialWindow> layerSurfaces;
   final DesktopWorkspaceState desktop;
   final DesktopWindowCloseEffect closeEffect;
   final MinimizedWindowPlacement minimizedWindowPlacement;
@@ -697,14 +699,20 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         continue;
       }
       final closeId = _nextCloseId++;
-      final clipScrollingTile =
-          ref.read(shellSettingsProvider).layout.windowLayout ==
-              DesktopWindowLayout.scrolling &&
-          !oldWidget.desktop.isInOverview(window.objectId) &&
-          !DesktopWindowSwitcherLayout.contains(
-            oldWidget.windowSwitcher,
-            window.objectId,
-          );
+      final outputClip = desktopScrollingOutputClip(
+        windowLayout: ref.read(shellSettingsProvider).layout.windowLayout,
+        pinned: window.pinned,
+        transformed:
+            oldWidget.desktop.isInOverview(window.objectId) ||
+            DesktopWindowSwitcherLayout.contains(
+              oldWidget.windowSwitcher,
+              window.objectId,
+            ),
+        outputRect: desktopOutputPixelGridForMonitor(
+          oldWidget.displayLayout,
+          placement.monitorId,
+        )?.logicalRect,
+      );
       _closingWindows[closeId] = _ClosingDesktopWindow(
         id: closeId,
         window: window,
@@ -713,12 +721,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
             placement.fullscreen &&
             !oldWidget.desktop.isInOverview(window.objectId),
         effect: widget.closeEffect,
-        outputClip: clipScrollingTile
-            ? desktopOutputPixelGridForMonitor(
-                oldWidget.displayLayout,
-                placement.monitorId,
-              )?.logicalRect
-            : null,
+        outputClip: outputClip,
       );
     }
   }
@@ -787,6 +790,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   Widget build(BuildContext context) {
     final viewSize = widget.viewSize;
     final windows = widget.windows;
+    final layerSurfaces = widget.layerSurfaces;
     final desktop = widget.desktop;
     final windowSwitcher = widget.windowSwitcher;
     final displayLayout = widget.displayLayout;
@@ -887,6 +891,15 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
       fit: StackFit.expand,
       children: [
         const ShellWallpaper(),
+        for (final surface in layerSurfaces)
+          if (surface.contentKind ==
+                  DenialWindowContentKind.layerShellBackground ||
+              surface.contentKind == DenialWindowContentKind.layerShellBottom)
+            _DesktopLayerShellSurface(
+              key: ValueKey<String>('layer-shell-${surface.surfaceId}'),
+              surface: surface,
+              displayLayout: displayLayout,
+            ),
         Positioned.fill(
           child: IgnorePointer(
             ignoring: wallpaperSelectorVisible,
@@ -1067,6 +1080,14 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
             ),
           ),
         ),
+        for (final surface in layerSurfaces)
+          if (surface.contentKind == DenialWindowContentKind.layerShellTop ||
+              surface.contentKind == DenialWindowContentKind.layerShellOverlay)
+            _DesktopLayerShellSurface(
+              key: ValueKey<String>('layer-shell-${surface.surfaceId}'),
+              surface: surface,
+              displayLayout: displayLayout,
+            ),
         const ClipboardTrayLayer(),
         Positioned.fill(
           child: ShellInputRegion(

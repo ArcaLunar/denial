@@ -19,7 +19,8 @@ pub(super) const DISPLAY_POWER_CHANNEL: &CStr = c"denial/display_power";
 const LEGACY_PACKET_BYTES: usize = size_of::<u64>();
 const PACKET_BYTES: usize = 32;
 const LEGACY_CONFIGURATION_PACKET_VERSION: u8 = 1;
-const PACKET_VERSION: u8 = 2;
+const SUSPEND_MODE_CONFIGURATION_PACKET_VERSION: u8 = 2;
+const PACKET_VERSION: u8 = 3;
 const LOCK_ENABLED: u8 = 1 << 0;
 const DPMS_ENABLED: u8 = 1 << 1;
 const SUSPEND_ENABLED: u8 = 1 << 2;
@@ -40,6 +41,38 @@ pub(super) struct IdlePolicyConfiguration {
     pub(super) dpms_timeout: Option<Duration>,
     pub(super) suspend_timeout: Option<Duration>,
     pub(super) suspend_mode: SuspendMode,
+    pub(super) power_button_action: PowerButtonAction,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u8)]
+pub(super) enum PowerButtonAction {
+    #[default]
+    Dpms = 0,
+    Suspend = 1,
+    Hibernate = 2,
+    PowerOff = 3,
+}
+
+impl PowerButtonAction {
+    fn decode(value: u8) -> Option<Self> {
+        match value {
+            0 => Some(Self::Dpms),
+            1 => Some(Self::Suspend),
+            2 => Some(Self::Hibernate),
+            3 => Some(Self::PowerOff),
+            _ => None,
+        }
+    }
+
+    pub(super) fn logind_method(self) -> Option<&'static str> {
+        match self {
+            Self::Dpms => None,
+            Self::Suspend => Some("Suspend"),
+            Self::Hibernate => Some("Hibernate"),
+            Self::PowerOff => Some("PowerOff"),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -86,6 +119,7 @@ pub(super) enum IdlePolicyPacketError {
     UnsupportedVersion(u8),
     InvalidFlags(u8),
     InvalidSuspendMode(u8),
+    InvalidPowerButtonAction(u8),
     NonZeroReservedBytes,
     ZeroTimeout(&'static str),
     TimeoutTooLarge {
@@ -118,6 +152,12 @@ impl fmt::Display for IdlePolicyPacketError {
                 write!(
                     formatter,
                     "idle policy packet has invalid suspend mode {mode}"
+                )
+            }
+            Self::InvalidPowerButtonAction(action) => {
+                write!(
+                    formatter,
+                    "idle policy packet has invalid power button action {action}"
                 )
             }
             Self::NonZeroReservedBytes => {
@@ -183,19 +223,33 @@ pub(super) fn decode_configuration(
     if packet.len() != PACKET_BYTES {
         return Err(IdlePolicyPacketError::InvalidSize(packet.len()));
     }
-    let suspend_mode = match packet[0] {
+    let (suspend_mode, power_button_action) = match packet[0] {
         LEGACY_CONFIGURATION_PACKET_VERSION => {
             if packet[2..8].iter().any(|byte| *byte != 0) {
                 return Err(IdlePolicyPacketError::NonZeroReservedBytes);
             }
-            SuspendMode::SystemDefault
+            (SuspendMode::SystemDefault, PowerButtonAction::Dpms)
         }
-        PACKET_VERSION => {
+        SUSPEND_MODE_CONFIGURATION_PACKET_VERSION => {
             if packet[3..8].iter().any(|byte| *byte != 0) {
                 return Err(IdlePolicyPacketError::NonZeroReservedBytes);
             }
-            SuspendMode::decode(packet[2])
-                .ok_or(IdlePolicyPacketError::InvalidSuspendMode(packet[2]))?
+            (
+                SuspendMode::decode(packet[2])
+                    .ok_or(IdlePolicyPacketError::InvalidSuspendMode(packet[2]))?,
+                PowerButtonAction::Dpms,
+            )
+        }
+        PACKET_VERSION => {
+            if packet[4..8].iter().any(|byte| *byte != 0) {
+                return Err(IdlePolicyPacketError::NonZeroReservedBytes);
+            }
+            (
+                SuspendMode::decode(packet[2])
+                    .ok_or(IdlePolicyPacketError::InvalidSuspendMode(packet[2]))?,
+                PowerButtonAction::decode(packet[3])
+                    .ok_or(IdlePolicyPacketError::InvalidPowerButtonAction(packet[3]))?,
+            )
         }
         version => return Err(IdlePolicyPacketError::UnsupportedVersion(version)),
     };
@@ -220,6 +274,7 @@ pub(super) fn decode_configuration(
         dpms_timeout: (flags & DPMS_ENABLED != 0).then_some(dpms_timeout),
         suspend_timeout: (flags & SUSPEND_ENABLED != 0).then_some(suspend_timeout),
         suspend_mode,
+        power_button_action,
     })
 }
 
@@ -311,6 +366,10 @@ impl Default for IdlePolicy {
 }
 
 impl IdlePolicy {
+    pub(super) fn power_button_action(&self) -> PowerButtonAction {
+        self.configuration.power_button_action
+    }
+
     /// A physical power press overrides the current output power state, even
     /// when an external power client originally switched the displays off.
     pub(super) fn toggle_now(

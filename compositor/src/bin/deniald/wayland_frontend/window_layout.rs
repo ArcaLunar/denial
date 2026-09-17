@@ -31,6 +31,31 @@ pub(crate) struct HorizontalLayoutScrollFrame {
 #[cfg(feature = "flutter")]
 const TOUCHPAD_SCROLLING_TILE_SWIPE_DISTANCE: f64 = 125.0;
 
+const LAYOUT_DROP_EDGE_FRACTION: f64 = 0.28;
+const LAYOUT_DROP_HYSTERESIS_FRACTION: f64 = 0.04;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LayoutDropMode {
+    Swap,
+    Split(LayoutDirection),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct LayoutDropTarget {
+    window: Window,
+    mode: LayoutDropMode,
+}
+
+impl LayoutDropTarget {
+    pub(crate) fn window(&self) -> &Window {
+        &self.window
+    }
+
+    pub(crate) const fn mode(&self) -> LayoutDropMode {
+        self.mode
+    }
+}
+
 #[cfg(feature = "flutter")]
 fn touchpad_scrolling_layout_delta(
     delta_x: f64,
@@ -53,6 +78,21 @@ fn scrolling_layout_axis(transform: super::OutputTransform) -> LayoutAxis {
     } else {
         LayoutAxis::Horizontal
     }
+}
+
+fn layout_frame_minimum_size(
+    minimum: Size<i32, Logical>,
+    server_side_decorated: bool,
+) -> Size<i32, Logical> {
+    let frame_extent = if server_side_decorated {
+        super::SHELL_FRAME_BORDER.saturating_mul(2)
+    } else {
+        0
+    };
+    Size::from((
+        constrain_dimension(1, minimum.w, 0).saturating_add(frame_extent),
+        constrain_dimension(1, minimum.h, 0).saturating_add(frame_extent),
+    ))
 }
 
 impl WaylandFrontend {
@@ -210,7 +250,7 @@ impl WaylandFrontend {
         }
     }
 
-    fn layout_swap_target_at(&self, location: Point<f64, Logical>) -> Option<Window> {
+    fn layout_window_at(&self, location: Point<f64, Logical>) -> Option<Window> {
         if !location.x.is_finite() || !location.y.is_finite() {
             return None;
         }
@@ -245,7 +285,8 @@ impl WaylandFrontend {
         &self,
         window: &Window,
         location: Point<i32, Logical>,
-    ) -> Option<Window> {
+        previous: Option<&LayoutDropTarget>,
+    ) -> Option<LayoutDropTarget> {
         if !self.window_is_layout_managed(window) {
             return None;
         }
@@ -254,21 +295,130 @@ impl WaylandFrontend {
             .iter()
             .find(|output| output.logical_geometry.contains(location))?
             .id;
-        self.layout_swap_target_at(location.to_f64()).or_else(|| {
+        let target = if let Some(target) = self.layout_window_at(location.to_f64()) {
+            target
+        } else {
             self.space
                 .elements()
                 .filter(|candidate| {
-                    self.managed_layout_space(candidate).is_some_and(|space| {
-                        space.output == output && space.workspace == self.active_workspace(output)
-                    }) && !self.window_has_constrained_state(candidate)
+                    *candidate != window
+                        && self.managed_layout_space(candidate).is_some_and(|space| {
+                            space.output == output
+                                && space.workspace == self.active_workspace(output)
+                        })
+                        && !self.window_has_constrained_state(candidate)
                 })
                 .min_by(|left, right| {
                     layout_drop_distance(self.window_geometry_target(left), location).total_cmp(
                         &layout_drop_distance(self.window_geometry_target(right), location),
                     )
                 })
-                .cloned()
+                .cloned()?
+        };
+        if target == *window {
+            return Some(LayoutDropTarget {
+                window: target,
+                mode: LayoutDropMode::Swap,
+            });
+        }
+        let previous_mode = previous
+            .filter(|previous| previous.window == target)
+            .map(|previous| previous.mode);
+        let mode = layout_drop_mode_for_kind(
+            self.window_layout.kind(),
+            self.window_geometry_target(&target),
+            location,
+            previous_mode,
+        );
+        Some(LayoutDropTarget {
+            window: target,
+            mode,
         })
+    }
+
+    /// Plan the exact post-drop layout on a disposable snapshot. Publishing
+    /// every changed sibling lets Flutter animate a whole scrolling column as
+    /// one coherent rearrangement while protocol geometry remains untouched.
+    #[cfg(feature = "flutter")]
+    pub(crate) fn layout_drop_preview(
+        &self,
+        window: &Window,
+        target: &LayoutDropTarget,
+    ) -> Vec<(Window, Rectangle<i32, Logical>)> {
+        let Some(window_id) = self.window_root_surface(window).map(|root| root.id()) else {
+            return Vec::new();
+        };
+        let Some(target_id) = self
+            .window_root_surface(target.window())
+            .map(|root| root.id())
+        else {
+            return Vec::new();
+        };
+        let mut preview = self.window_layout.snapshot();
+        let changed = match target.mode() {
+            LayoutDropMode::Swap => preview.swap(&window_id, &target_id),
+            LayoutDropMode::Split(direction) => {
+                preview.move_beside(&window_id, &target_id, direction)
+            }
+        };
+        if !changed {
+            return Vec::new();
+        }
+        preview.activate(&window_id);
+
+        let gap = self.layout_gap();
+        let workspace_count = self.layout_workspace_count();
+        let contexts = self
+            .outputs
+            .iter()
+            .map(|output| {
+                (
+                    output.id,
+                    self.maximize_work_area(Some(&output.output), output.logical_geometry),
+                    scrolling_layout_axis(output.transform),
+                )
+            })
+            .collect::<Vec<_>>();
+        for (output, work_area, axis) in &contexts {
+            for workspace in 1..=workspace_count {
+                preview.prepare_arrange(
+                    LayoutSpace::new(*output, workspace),
+                    *work_area,
+                    gap,
+                    *axis,
+                );
+            }
+        }
+
+        let current = self
+            .current_layout_placements()
+            .into_iter()
+            .map(|placement| (placement.window, placement.geometry))
+            .collect::<HashMap<_, _>>();
+        contexts
+            .into_iter()
+            .flat_map(|(output, work_area, _)| {
+                (1..=workspace_count).flat_map({
+                    let preview = &preview;
+                    move |workspace| {
+                        preview.arrange(LayoutSpace::new(output, workspace), work_area, gap)
+                    }
+                })
+            })
+            .filter(|placement| placement.window != window_id)
+            .filter(|placement| current.get(&placement.window).copied() != Some(placement.geometry))
+            .filter_map(|placement| {
+                let window = self.window_for_layout_id(&placement.window)?;
+                if self.window_has_constrained_state(&window) {
+                    return None;
+                }
+                let geometry = shell_content_geometry(
+                    placement.geometry,
+                    super::shell_draws_server_frame(&window),
+                );
+                Some((window, geometry))
+            })
+            .collect()
     }
 
     pub(crate) fn layout_neighbor_window(
@@ -366,14 +516,16 @@ impl WaylandFrontend {
         true
     }
 
-    /// Resolve a shell overview drop without surrendering geometry ownership.
-    /// A populated destination exchanges leaves; an empty output receives the
-    /// existing leaf as a normal layout insertion. Returning false means the
-    /// window is floating and the caller should apply ordinary placement.
+    /// Resolve a compositor-owned tile drop without surrendering geometry
+    /// ownership. Edge targets reparent the dragged leaf according to the
+    /// active layout, center targets exchange leaves, and an empty output
+    /// receives a normal layout insertion. Returning false means the window is
+    /// floating.
     pub(crate) fn apply_layout_drop(
         &mut self,
         window: &Window,
         location: Point<i32, Logical>,
+        target: Option<LayoutDropTarget>,
     ) -> bool {
         if !self.window_is_layout_managed(window) {
             return false;
@@ -389,10 +541,23 @@ impl WaylandFrontend {
         let Some(window_id) = self.window_root_surface(window).map(|root| root.id()) else {
             return true;
         };
-        let target = self.layout_drop_target_at(window, location);
+        let target = target.or_else(|| self.layout_drop_target_at(window, location, None));
         if let Some(target) = target {
-            if target != *window {
-                self.swap_layout_windows(window, &target);
+            let Some(target_id) = self
+                .window_root_surface(&target.window)
+                .map(|root| root.id())
+            else {
+                return true;
+            };
+            let changed = match target.mode {
+                LayoutDropMode::Swap => self.window_layout.swap(&window_id, &target_id),
+                LayoutDropMode::Split(direction) => self
+                    .window_layout
+                    .move_beside(&window_id, &target_id, direction),
+            };
+            if changed {
+                self.window_layout.activate(&window_id);
+                self.arrange_layout_windows();
             }
             return true;
         }
@@ -460,6 +625,11 @@ impl WaylandFrontend {
             return removed;
         }
         if self.window_layout.contains(&window_id) {
+            let minimum = self.layout_minimum_size(window);
+            if self.window_layout.update_minimum_size(&window_id, minimum) {
+                self.arrange_layout_windows();
+                return true;
+            }
             return false;
         }
         let geometry = self.window_geometry_target(window);
@@ -491,10 +661,12 @@ impl WaylandFrontend {
             .or_else(|| self.focused_layout_window())
             .filter(|anchor| self.window_layout.contains(anchor));
         self.window_layout.insert(LayoutInsertion {
-            window: window_id,
+            window: window_id.clone(),
             space,
             anchor,
         });
+        let minimum = self.layout_minimum_size(window);
+        self.window_layout.update_minimum_size(&window_id, minimum);
         self.arrange_layout_windows();
         true
     }
@@ -595,10 +767,11 @@ impl WaylandFrontend {
             return false;
         }
         let ownership_changed = self.reconcile_layout_workspace_ownership();
+        let minimum_sizes_changed = self.refresh_layout_minimum_sizes();
         self.prepare_layout_arrangement();
         let placements = self.current_layout_placements();
 
-        let mut changed = ownership_changed;
+        let mut changed = minimum_sizes_changed || ownership_changed;
         for LayoutPlacement {
             window: window_id,
             geometry: frame,
@@ -622,10 +795,7 @@ impl WaylandFrontend {
             let target = frame;
             let previous = self.window_geometry_target(&window);
             if let Some(managed) = ManagedWindow::new(&window) {
-                managed.prepare_tiled_geometry(
-                    target,
-                    layout_resize_required(previous, window.geometry().size, target),
-                );
+                managed.prepare_tiled_geometry(target, previous.size != target.size);
             }
             self.set_window_geometry_target_with_authority(
                 &window,
@@ -635,6 +805,34 @@ impl WaylandFrontend {
             changed |= previous != target;
         }
         changed
+    }
+
+    fn layout_minimum_size(&self, window: &Window) -> Size<i32, Logical> {
+        let minimum = self.window_size_constraints(window).0;
+        #[cfg(feature = "flutter")]
+        let server_side_decorated = super::shell_draws_server_frame(window);
+        #[cfg(not(feature = "flutter"))]
+        let server_side_decorated = false;
+        layout_frame_minimum_size(minimum, server_side_decorated)
+    }
+
+    fn refresh_layout_minimum_sizes(&mut self) -> bool {
+        let minimum_sizes = self
+            .space
+            .elements()
+            .filter_map(|window| {
+                let window_id = self.window_root_surface(window)?.id();
+                self.window_layout.contains(&window_id).then(|| {
+                    let minimum = self.layout_minimum_size(window);
+                    (window_id, minimum)
+                })
+            })
+            .collect::<Vec<_>>();
+        minimum_sizes
+            .into_iter()
+            .fold(false, |changed, (window, minimum)| {
+                self.window_layout.update_minimum_size(&window, minimum) || changed
+            })
     }
 
     fn prepare_layout_arrangement(&mut self) {
@@ -681,7 +879,7 @@ impl WaylandFrontend {
             .collect()
     }
 
-    fn layout_gap(&self) -> i32 {
+    pub(crate) fn layout_gap(&self) -> i32 {
         if self.work_area.maximize_padding.is_finite() {
             self.work_area.maximize_padding.round().max(0.0) as i32
         } else {
@@ -760,6 +958,10 @@ impl WaylandFrontend {
         let minimized = self.minimized_windows.contains(&root.id());
         #[cfg(not(feature = "flutter"))]
         let minimized = false;
+        #[cfg(feature = "flutter")]
+        let pinned = self.window_is_pinned(window);
+        #[cfg(not(feature = "flutter"))]
+        let pinned = false;
         let Some(facts) = ManagedWindow::new(window).map(|window| window.facts()) else {
             return false;
         };
@@ -769,6 +971,7 @@ impl WaylandFrontend {
             auxiliary: facts.auxiliary,
             override_redirect: facts.override_redirect,
             minimized,
+            pinned,
         }
         .is_tiling_candidate()
     }
@@ -847,6 +1050,11 @@ impl WaylandFrontend {
         1
     }
 
+    #[cfg(not(feature = "flutter"))]
+    fn active_workspace(&self, _output: OutputId) -> u8 {
+        1
+    }
+
     fn layout_space_for_window(&self, window: &Window, physical_output: OutputId) -> LayoutSpace {
         #[cfg(feature = "flutter")]
         {
@@ -868,6 +1076,31 @@ impl WaylandFrontend {
     pub(super) fn managed_layout_space(&self, window: &Window) -> Option<LayoutSpace> {
         let window_id = self.window_root_surface(window)?.id();
         self.window_layout.space_for(&window_id)
+    }
+
+    /// Returns the authoritative rectangles for every leaf sharing this
+    /// window's layout space. Interactive layout resizes use the complete set
+    /// to close each Flutter placement transaction, including sibling tiles
+    /// whose rectangles moved with a shared split boundary.
+    pub(crate) fn layout_window_geometries(
+        &self,
+        window: &Window,
+    ) -> Vec<(Window, Rectangle<i32, Logical>)> {
+        let Some(layout_space) = self.managed_layout_space(window) else {
+            return Vec::new();
+        };
+        self.current_layout_placements()
+            .into_iter()
+            .filter(|placement| {
+                self.window_layout.space_for(&placement.window) == Some(layout_space)
+            })
+            .filter_map(|placement| {
+                self.window_for_layout_id(&placement.window).map(|window| {
+                    let geometry = self.window_geometry_target(&window);
+                    (window, geometry)
+                })
+            })
+            .collect()
     }
 
     /// The layout tree is the sole owner of a tiled leaf's output/workspace.
@@ -911,6 +1144,7 @@ struct LayoutWindowProperties {
     auxiliary: bool,
     override_redirect: bool,
     minimized: bool,
+    pinned: bool,
 }
 
 impl LayoutWindowProperties {
@@ -920,6 +1154,7 @@ impl LayoutWindowProperties {
             && !self.auxiliary
             && !self.override_redirect
             && !self.minimized
+            && !self.pinned
     }
 }
 
@@ -927,6 +1162,85 @@ fn layout_drop_distance(geometry: Rectangle<i32, Logical>, location: Point<i32, 
     let center_x = f64::from(geometry.loc.x) + f64::from(geometry.size.w) / 2.0;
     let center_y = f64::from(geometry.loc.y) + f64::from(geometry.size.h) / 2.0;
     (center_x - f64::from(location.x)).powi(2) + (center_y - f64::from(location.y)).powi(2)
+}
+
+fn layout_drop_mode_for_kind(
+    kind: WindowLayoutKind,
+    geometry: Rectangle<i32, Logical>,
+    location: Point<i32, Logical>,
+    previous: Option<LayoutDropMode>,
+) -> LayoutDropMode {
+    if matches!(
+        kind,
+        WindowLayoutKind::Dwindle | WindowLayoutKind::Scrolling
+    ) {
+        layout_drop_mode(geometry, location, previous)
+    } else {
+        LayoutDropMode::Swap
+    }
+}
+
+fn layout_drop_mode(
+    geometry: Rectangle<i32, Logical>,
+    location: Point<i32, Logical>,
+    previous: Option<LayoutDropMode>,
+) -> LayoutDropMode {
+    if geometry.size.w <= 0 || geometry.size.h <= 0 {
+        return LayoutDropMode::Swap;
+    }
+    let x = f64::from(location.x.saturating_sub(geometry.loc.x)) / f64::from(geometry.size.w);
+    let y = f64::from(location.y.saturating_sub(geometry.loc.y)) / f64::from(geometry.size.h);
+    let distances = [
+        (x, LayoutDirection::Left),
+        (1.0 - x, LayoutDirection::Right),
+        (y, LayoutDirection::Up),
+        (1.0 - y, LayoutDirection::Down),
+    ];
+
+    if let Some(previous) = previous {
+        match previous {
+            LayoutDropMode::Swap => {
+                let edge = LAYOUT_DROP_EDGE_FRACTION - LAYOUT_DROP_HYSTERESIS_FRACTION;
+                if x >= edge && x <= 1.0 - edge && y >= edge && y <= 1.0 - edge {
+                    return LayoutDropMode::Swap;
+                }
+            }
+            LayoutDropMode::Split(direction) => {
+                let previous_distance = distances
+                    .iter()
+                    .find_map(|(distance, candidate)| {
+                        (*candidate == direction).then_some(*distance)
+                    })
+                    .expect("every split direction has an edge distance");
+                let nearest_other = distances
+                    .iter()
+                    .filter_map(|(distance, candidate)| {
+                        (*candidate != direction).then_some(*distance)
+                    })
+                    .min_by(f64::total_cmp)
+                    .expect("a rectangle has three other edges");
+                if previous_distance <= LAYOUT_DROP_EDGE_FRACTION + LAYOUT_DROP_HYSTERESIS_FRACTION
+                    && previous_distance <= nearest_other + LAYOUT_DROP_HYSTERESIS_FRACTION
+                {
+                    return LayoutDropMode::Split(direction);
+                }
+            }
+        }
+    }
+
+    if x >= LAYOUT_DROP_EDGE_FRACTION
+        && x <= 1.0 - LAYOUT_DROP_EDGE_FRACTION
+        && y >= LAYOUT_DROP_EDGE_FRACTION
+        && y <= 1.0 - LAYOUT_DROP_EDGE_FRACTION
+    {
+        return LayoutDropMode::Swap;
+    }
+    let direction = distances
+        .into_iter()
+        .min_by(|left, right| left.0.total_cmp(&right.0))
+        .map(|(_, direction)| direction)
+        .expect("a rectangle always has an edge");
+    LayoutDropMode::Split(direction)
 }
 
 fn has_visible_size(geometry: Rectangle<i32, Logical>) -> bool {
@@ -944,14 +1258,6 @@ fn visible_stacking_restore(
         saved.size = current.size;
     }
     saved
-}
-
-fn layout_resize_required(
-    previous_target: Rectangle<i32, Logical>,
-    committed_size: smithay::utils::Size<i32, Logical>,
-    next_target: Rectangle<i32, Logical>,
-) -> bool {
-    previous_target.size != next_target.size || committed_size != next_target.size
 }
 
 #[cfg(test)]
@@ -977,18 +1283,82 @@ mod tests {
     }
 
     #[test]
-    fn layout_resize_uses_committed_client_size_even_when_the_target_cache_is_current() {
-        let target = rect(400, 0, 800, 900);
-        assert!(layout_resize_required(
-            target,
-            Size::from((600, 900)),
-            target
-        ));
-        assert!(!layout_resize_required(
-            rect(20, 30, 800, 900),
-            Size::from((800, 900)),
-            target
-        ));
+    fn dwindle_drop_uses_center_for_swap_and_edges_for_directional_splits() {
+        let geometry = rect(100, 200, 1000, 600);
+        assert_eq!(
+            layout_drop_mode(geometry, Point::from((600, 500)), None),
+            LayoutDropMode::Swap,
+        );
+        assert_eq!(
+            layout_drop_mode(geometry, Point::from((110, 500)), None),
+            LayoutDropMode::Split(LayoutDirection::Left),
+        );
+        assert_eq!(
+            layout_drop_mode(geometry, Point::from((1090, 500)), None),
+            LayoutDropMode::Split(LayoutDirection::Right),
+        );
+        assert_eq!(
+            layout_drop_mode(geometry, Point::from((600, 210)), None),
+            LayoutDropMode::Split(LayoutDirection::Up),
+        );
+        assert_eq!(
+            layout_drop_mode(geometry, Point::from((600, 790)), None),
+            LayoutDropMode::Split(LayoutDirection::Down),
+        );
+    }
+
+    #[test]
+    fn dwindle_drop_hysteresis_stabilizes_center_and_edge_previews() {
+        let geometry = rect(0, 0, 1000, 1000);
+        let near_left_boundary = Point::from((260, 500));
+        assert_eq!(
+            layout_drop_mode(geometry, near_left_boundary, None),
+            LayoutDropMode::Split(LayoutDirection::Left),
+        );
+        assert_eq!(
+            layout_drop_mode(geometry, near_left_boundary, Some(LayoutDropMode::Swap),),
+            LayoutDropMode::Swap,
+        );
+
+        let near_center_boundary = Point::from((300, 500));
+        assert_eq!(
+            layout_drop_mode(geometry, near_center_boundary, None),
+            LayoutDropMode::Swap,
+        );
+        assert_eq!(
+            layout_drop_mode(
+                geometry,
+                near_center_boundary,
+                Some(LayoutDropMode::Split(LayoutDirection::Left)),
+            ),
+            LayoutDropMode::Split(LayoutDirection::Left),
+        );
+    }
+
+    #[test]
+    fn scrolling_uses_directional_drop_zones_while_stacking_remains_swap_only() {
+        let geometry = rect(0, 0, 1000, 600);
+        let top_edge = Point::from((500, 10));
+        assert_eq!(
+            layout_drop_mode_for_kind(WindowLayoutKind::Scrolling, geometry, top_edge, None,),
+            LayoutDropMode::Split(LayoutDirection::Up),
+        );
+        assert_eq!(
+            layout_drop_mode_for_kind(WindowLayoutKind::Stacking, geometry, top_edge, None),
+            LayoutDropMode::Swap,
+        );
+    }
+
+    #[test]
+    fn decorated_layout_minimum_includes_the_server_frame() {
+        assert_eq!(
+            layout_frame_minimum_size(Size::from((800, 600)), true),
+            Size::from((802, 602)),
+        );
+        assert_eq!(
+            layout_frame_minimum_size(Size::from((0, 0)), false),
+            Size::from((1, 1)),
+        );
     }
 
     #[cfg(feature = "flutter")]
@@ -1036,6 +1406,7 @@ mod tests {
             auxiliary: false,
             override_redirect: false,
             minimized: false,
+            pinned: false,
         };
         assert!(regular.is_tiling_candidate());
         assert!(
@@ -1048,6 +1419,13 @@ mod tests {
         assert!(
             !LayoutWindowProperties {
                 transient: true,
+                ..regular
+            }
+            .is_tiling_candidate()
+        );
+        assert!(
+            !LayoutWindowProperties {
+                pinned: true,
                 ..regular
             }
             .is_tiling_candidate()

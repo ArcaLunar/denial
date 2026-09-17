@@ -1,4 +1,5 @@
 import 'package:denial_dart_shell/src/models/display_layout.dart';
+import 'package:denial_dart_shell/src/models/power_button_action.dart';
 import 'package:denial_dart_shell/src/models/shell_popup_placement.dart';
 import 'package:denial_dart_shell/src/models/suspend_mode.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
@@ -69,6 +70,7 @@ void main() {
       expect(power.idleSuspendEnabled, isFalse);
       expect(power.idleSuspendTimeoutMinutes, 30);
       expect(power.suspendMode, SuspendMode.systemDefault);
+      expect(power.powerButtonAction, PowerButtonAction.dpms);
     },
   );
 
@@ -146,6 +148,7 @@ void main() {
         showSystemStatus: false,
       ),
       power: ShellPowerSettings(
+        powerButtonAction: PowerButtonAction.hibernate,
         idleLockEnabled: false,
         idleLockTimeoutMinutes: 13,
         idleDpmsEnabled: false,
@@ -183,6 +186,23 @@ void main() {
     );
     expect(next.differenceFrom(previous), <String, Object?>{
       'power': <String, Object?>{'suspendMode': 's2idle'},
+    });
+  });
+
+  test('power button action persists and produces a typed patch', () {
+    const previous = ShellSettings();
+    final next = previous.copyWith(
+      power: previous.power.copyWith(
+        powerButtonAction: PowerButtonAction.powerOff,
+      ),
+    );
+
+    expect(
+      ShellSettings.fromJson(next.toJson()).power.powerButtonAction,
+      PowerButtonAction.powerOff,
+    );
+    expect(next.differenceFrom(previous), <String, Object?>{
+      'power': <String, Object?>{'powerButtonAction': 'powerOff'},
     });
   });
 

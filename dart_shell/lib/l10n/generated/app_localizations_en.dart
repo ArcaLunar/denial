@@ -1354,6 +1354,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAutomaticIdleTitle => 'Automatic idle actions';
 
   @override
+  String get settingsPowerButtonTitle => 'Power button';
+
+  @override
+  String get settingsPowerButtonAction => 'Action';
+
+  @override
+  String get settingsPowerButtonDescription =>
+      'Choose what happens when you press the physical power button.';
+
+  @override
+  String get settingsPowerButtonSuspend => 'Suspend';
+
+  @override
+  String get settingsPowerButtonHibernate => 'Hibernate';
+
+  @override
+  String get settingsPowerButtonHibernateUnavailable =>
+      'Hibernate (unavailable)';
+
+  @override
+  String get settingsPowerButtonDpms => 'Turn off displays (DPMS)';
+
+  @override
+  String get settingsPowerButtonPowerOff => 'Power off';
+
+  @override
   String get settingsAutomaticLockToggle => 'Lock automatically';
 
   @override

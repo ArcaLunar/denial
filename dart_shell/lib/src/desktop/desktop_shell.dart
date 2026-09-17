@@ -894,6 +894,9 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
           ),
         )
         .windows;
+    final layerSurfaces = ref.watch(
+      shellControllerProvider.select((state) => state.layerSurfaces),
+    );
     final animations = ref.watch(
       shellSettingsProvider.select((settings) => settings.animations),
     );
@@ -934,6 +937,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             child: _DesktopScene(
               viewSize: constraints.biggest,
               windows: windows,
+              layerSurfaces: layerSurfaces,
               desktop: desktop,
               closeEffect: animations.windowCloseEffect,
               minimizedWindowPlacement: minimizedWindowPlacement,

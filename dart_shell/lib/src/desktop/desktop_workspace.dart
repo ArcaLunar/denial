@@ -8,6 +8,7 @@ import '../models/display_layout.dart';
 import '../models/denial_window.dart';
 import '../models/denial_window_event.dart';
 import '../models/shell_popup_placement.dart';
+import '../settings/shell_settings.dart';
 import 'desktop_overview_layout.dart';
 
 part 'desktop_workspace_controller.dart';
@@ -116,6 +117,20 @@ abstract final class DesktopMetrics {
     return Offset.zero & viewSize;
   }
 }
+
+/// Clips only layout-managed scrolling tiles to their output viewport.
+///
+/// Pinned windows are floating overlays even while the desktop uses the
+/// scrolling layout, so their rendering and input regions must remain free of
+/// the tile viewport clip.
+Rect? desktopScrollingOutputClip({
+  required DesktopWindowLayout windowLayout,
+  required bool pinned,
+  required bool transformed,
+  required Rect? outputRect,
+}) => windowLayout == DesktopWindowLayout.scrolling && !pinned && !transformed
+    ? outputRect
+    : null;
 
 enum DesktopPanel { none, launcher, dashboard }
 
