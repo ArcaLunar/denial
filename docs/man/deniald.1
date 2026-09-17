@@ -37,7 +37,9 @@ Load the packaged Flutter shell bundle from
 Select the Flutter GLES renderer. Impeller is the default.
 .TP
 .B \-\-software-rendering
-Set Mesa's
+Select Mesa's
+.B kms_swrast
+driver and set
 .B LIBGL_ALWAYS_SOFTWARE=1
 before initializing GBM, EGL, or Flutter. The installed session launcher uses
 this compatibility path automatically for VMware
@@ -73,7 +75,9 @@ Additional reconfiguration and topology-test options are listed by
 .B LIBGL_ALWAYS_SOFTWARE
 Control Mesa's hardware or software renderer selection. The
 .B \-\-software-rendering
-option sets this to 1 before graphics initialization.
+option sets this to 1 and sets
+.B MESA_LOADER_DRIVER_OVERRIDE=kms_swrast
+before graphics initialization.
 .TP
 .B DENIAL_NO_PREDECESSOR=1
 Force the session-handoff KMS path without capturing a predecessor framebuffer.

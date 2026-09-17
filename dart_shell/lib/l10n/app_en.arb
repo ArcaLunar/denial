@@ -1943,6 +1943,38 @@
   "@settingsAutomaticIdleTitle": {
     "description": "Title for the coordinated idle lock, display power, and suspend settings."
   },
+  "settingsPowerButtonTitle": "Power button",
+  "@settingsPowerButtonTitle": {
+    "description": "Title for physical power button behavior settings."
+  },
+  "settingsPowerButtonAction": "Action",
+  "@settingsPowerButtonAction": {
+    "description": "Label for the physical power button action selector."
+  },
+  "settingsPowerButtonDescription": "Choose what happens when you press the physical power button.",
+  "@settingsPowerButtonDescription": {
+    "description": "Explanation for the physical power button action selector."
+  },
+  "settingsPowerButtonSuspend": "Suspend",
+  "@settingsPowerButtonSuspend": {
+    "description": "Power button action that suspends the system."
+  },
+  "settingsPowerButtonHibernate": "Hibernate",
+  "@settingsPowerButtonHibernate": {
+    "description": "Power button action that hibernates the system."
+  },
+  "settingsPowerButtonHibernateUnavailable": "Hibernate (unavailable)",
+  "@settingsPowerButtonHibernateUnavailable": {
+    "description": "Disabled persisted hibernate action when hibernation is unavailable."
+  },
+  "settingsPowerButtonDpms": "Turn off displays (DPMS)",
+  "@settingsPowerButtonDpms": {
+    "description": "Power button action that toggles compositor-owned display power."
+  },
+  "settingsPowerButtonPowerOff": "Power off",
+  "@settingsPowerButtonPowerOff": {
+    "description": "Power button action that powers off the system."
+  },
   "settingsAutomaticLockToggle": "Lock automatically",
   "@settingsAutomaticLockToggle": {
     "description": "Toggle for automatically locking the session after inactivity."
@@ -2264,6 +2296,10 @@
   "settingsTransparencyTitle": "Transparency material",
   "@settingsTransparencyTitle": {
     "description": "Title for choosing the visual material behind translucent shell surfaces."
+  },
+  "settingsTypographyTitle": "Typography",
+  "@settingsTypographyTitle": {
+    "description": "Title for shell typography appearance settings."
   },
   "settingsTransparencyOff": "Off",
   "@settingsTransparencyOff": {
@@ -2737,6 +2773,22 @@
   "settingsFocusedWindows": "Focused windows",
   "@settingsFocusedWindows": {
     "description": "English UI text for settingsFocusedWindows."
+  },
+  "settingsFontCatalogLoading": "Finding installed fonts…",
+  "@settingsFontCatalogLoading": {
+    "description": "Description shown while the shell font catalog is loading."
+  },
+  "settingsFontDescription": "Use the system default or an installed font across the Denial shell.",
+  "@settingsFontDescription": {
+    "description": "Explanation for the shell font family selector."
+  },
+  "settingsFontFamily": "Font family",
+  "@settingsFontFamily": {
+    "description": "Label for the shell font family selector."
+  },
+  "settingsFontSystemDefault": "System default",
+  "@settingsFontSystemDefault": {
+    "description": "Option that restores the platform's default font family."
   },
   "settingsFocusedWindowBorder": "Highlight the focused window border",
   "@settingsFocusedWindowBorder": {

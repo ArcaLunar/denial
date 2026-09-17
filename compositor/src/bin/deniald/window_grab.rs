@@ -17,6 +17,8 @@ use smithay::xwayland::xwm::ResizeEdge as X11ResizeEdge;
 
 use super::RuntimeState;
 #[cfg(feature = "flutter")]
+use super::wayland_frontend::LayoutDropTarget;
+#[cfg(feature = "flutter")]
 use super::window_layout::LayoutResizeEdges;
 #[cfg(feature = "flutter")]
 use super::wire::{WindowGeometry, WindowPlacementChange, WindowPlacementPhase};
@@ -78,13 +80,6 @@ fn translated_move_location(
         round_to_i32_saturating(f64::from(initial.x) + delta.x, initial.x),
         round_to_i32_saturating(f64::from(initial.y) + delta.y, initial.y),
     )))
-}
-
-fn translated_layout_preview_geometry(
-    destination: Point<i32, Logical>,
-    current: Rectangle<i32, Logical>,
-) -> Rectangle<i32, Logical> {
-    Rectangle::new(destination, current.size)
 }
 
 fn anchored_resize_origin(origin: i32, initial_extent: i32, resized_extent: i32) -> i32 {
@@ -373,17 +368,18 @@ impl PointerGrab<RuntimeState> for MoveSurfaceGrab {
 /// resolves the destination, then Flutter animates from that exact rectangle
 /// to the resulting tile without issuing speculative client configures.
 #[cfg(feature = "flutter")]
-pub(super) struct TileSwapGrab {
+pub(super) struct TileMoveGrab {
     start_data: GrabStartData<RuntimeState>,
     window: Window,
     initial_geometry: Rectangle<i32, Logical>,
     last_geometry: Rectangle<i32, Logical>,
     last_pointer_location: Point<f64, Logical>,
-    preview_target: Option<Window>,
+    preview_target: Option<LayoutDropTarget>,
+    preview_windows: Vec<Window>,
 }
 
 #[cfg(feature = "flutter")]
-impl TileSwapGrab {
+impl TileMoveGrab {
     pub(super) fn new(
         start_data: GrabStartData<RuntimeState>,
         window: Window,
@@ -397,73 +393,86 @@ impl TileSwapGrab {
             last_geometry: initial_geometry,
             last_pointer_location,
             preview_target: None,
+            preview_windows: Vec::new(),
         }
     }
 
-    fn update_preview(&mut self, data: &mut RuntimeState, target: Option<Window>) {
-        let target = target.filter(|target| target != &self.window);
+    fn update_preview(&mut self, data: &mut RuntimeState, target: Option<LayoutDropTarget>) {
         if self.preview_target == target {
             return;
         }
-        if let Some(previous) = self.preview_target.take()
-            && window_is_mapped(data, &previous)
-        {
+        let planned = target
+            .as_ref()
+            .filter(|target| target.window() != &self.window)
+            .map(|target| {
+                data.wayland
+                    .as_ref()
+                    .expect("missing Wayland frontend")
+                    .layout_drop_preview(&self.window, target)
+            })
+            .unwrap_or_default();
+        let previous = std::mem::take(&mut self.preview_windows);
+
+        for window in &previous {
+            if planned.iter().any(|(candidate, _)| candidate == window)
+                || !window_is_mapped(data, window)
+            {
+                continue;
+            }
             let geometry = data
                 .wayland
                 .as_ref()
                 .expect("missing Wayland frontend")
-                .window_geometry_target(&previous);
+                .window_geometry_target(window);
             super::wayland_frontend::queue_transient_window_placement(
                 data,
-                &previous,
+                window,
                 geometry,
                 WindowPlacementPhase::End,
                 WindowPlacementChange::LayoutPreview,
             );
         }
-        if let Some(target) = target {
-            let geometry = data
-                .wayland
-                .as_ref()
-                .expect("missing Wayland frontend")
-                .window_geometry_target(&target);
-            let preview_geometry =
-                translated_layout_preview_geometry(self.initial_geometry.loc, geometry);
+        for (window, geometry) in planned {
+            let continuing = previous.iter().any(|candidate| candidate == &window);
             super::wayland_frontend::queue_transient_window_placement(
                 data,
-                &target,
-                preview_geometry,
-                WindowPlacementPhase::Begin,
+                &window,
+                geometry,
+                if continuing {
+                    WindowPlacementPhase::Update
+                } else {
+                    WindowPlacementPhase::Begin
+                },
                 WindowPlacementChange::LayoutPreview,
             );
-            self.preview_target = Some(target);
+            self.preview_windows.push(window);
         }
+        self.preview_target = target;
     }
 
     fn clear_preview(&mut self, data: &mut RuntimeState) {
-        let Some(target) = self.preview_target.take() else {
-            return;
-        };
-        if !window_is_mapped(data, &target) {
-            return;
+        self.preview_target = None;
+        for window in std::mem::take(&mut self.preview_windows) {
+            if window_is_mapped(data, &window) {
+                let geometry = data
+                    .wayland
+                    .as_ref()
+                    .expect("missing Wayland frontend")
+                    .window_geometry_target(&window);
+                super::wayland_frontend::queue_transient_window_placement(
+                    data,
+                    &window,
+                    geometry,
+                    WindowPlacementPhase::End,
+                    WindowPlacementChange::LayoutPreview,
+                );
+            }
         }
-        let geometry = data
-            .wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .window_geometry_target(&target);
-        super::wayland_frontend::queue_transient_window_placement(
-            data,
-            &target,
-            geometry,
-            WindowPlacementPhase::End,
-            WindowPlacementChange::LayoutPreview,
-        );
     }
 }
 
 #[cfg(feature = "flutter")]
-impl PointerGrab<RuntimeState> for TileSwapGrab {
+impl PointerGrab<RuntimeState> for TileMoveGrab {
     fn motion(
         &mut self,
         data: &mut RuntimeState,
@@ -497,7 +506,7 @@ impl PointerGrab<RuntimeState> for TileSwapGrab {
             .wayland
             .as_ref()
             .expect("missing Wayland frontend")
-            .layout_drop_target_at(&self.window, drop_location);
+            .layout_drop_target_at(&self.window, drop_location, self.preview_target.as_ref());
         self.update_preview(data, target);
         super::wayland_frontend::queue_transient_window_placement(
             data,
@@ -559,7 +568,7 @@ impl PointerGrab<RuntimeState> for TileSwapGrab {
                         self.initial_geometry.loc.y,
                     ),
                 ));
-                frontend.apply_layout_drop(&self.window, location);
+                frontend.apply_layout_drop(&self.window, location, self.preview_target.clone());
             }
             frontend.window_geometry_target(&self.window)
         };
@@ -1140,16 +1149,6 @@ mod tests {
         assert_eq!(
             translated_move_location(initial, start, Point::from((f64::NAN, 151.25))),
             None
-        );
-    }
-
-    #[test]
-    fn layout_preview_translates_without_resizing_the_displaced_window() {
-        let current = Rectangle::<i32, Logical>::new((640, 80).into(), (480, 720).into());
-
-        assert_eq!(
-            translated_layout_preview_geometry(Point::from((40, 120)), current),
-            Rectangle::new((40, 120).into(), (480, 720).into()),
         );
     }
 }

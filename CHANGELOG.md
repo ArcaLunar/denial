@@ -49,6 +49,9 @@ boundaries may change before 1.0.
 
 ### Fixed
 
+- KMS-only compositor builds now keep shared hotplug and Wayland behavior
+  available without the Flutter shell, and scheduler setup supports musl's
+  extended `sched_param` layout.
 - Installed sessions now detect VMware `vmwgfx` render devices and select
   Mesa's KMS software renderer before GBM/EGL initialization, avoiding an
   immediate compositor abort when accelerated EGL is unavailable.

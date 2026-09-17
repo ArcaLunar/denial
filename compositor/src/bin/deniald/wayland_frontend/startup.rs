@@ -19,6 +19,7 @@ impl WaylandFrontend {
         let loop_handle = event_loop.handle();
         let compositor_state = CompositorState::new::<RuntimeState>(&display_handle);
         let xdg_shell_state = XdgShellState::new::<RuntimeState>(&display_handle);
+        let layer_shell_state = WlrLayerShellState::new::<RuntimeState>(&display_handle);
         let xdg_activation_state = XdgActivationState::new::<RuntimeState>(&display_handle);
         let xwayland_shell_state = XWaylandShellState::new::<RuntimeState>(&display_handle);
         let xwayland_keyboard_grab_state =
@@ -324,6 +325,7 @@ impl WaylandFrontend {
                             error!(%error, "could not publish Xwayland settings");
                         }
                         frontend.xwm = Some(xwm);
+                        #[cfg(feature = "flutter")]
                         match super::super::xembed_tray::XEmbedTray::start(frontend.xdisplay_name())
                         {
                             Ok(tray) => frontend.xembed_tray = Some(tray),
@@ -356,7 +358,7 @@ impl WaylandFrontend {
                     );
                 }
             })?;
-        init_libinput(event_loop, session, seat_name)?;
+        let libinput = init_libinput(event_loop, session, seat_name)?;
         Ok(Self {
             start_time: Instant::now(),
             socket_name,
@@ -421,11 +423,17 @@ impl WaylandFrontend {
             scene_complex_windows: HashSet::new(),
             #[cfg(feature = "flutter")]
             scene_complex_windows_scratch: HashSet::new(),
+            #[cfg(feature = "flutter")]
+            scene_layer_surface_roots: HashSet::new(),
+            #[cfg(feature = "flutter")]
+            scene_layer_surface_roots_scratch: HashSet::new(),
             window_membership_scratch: Vec::new(),
             #[cfg(feature = "flutter")]
             output_window_membership: OutputWindowMembership::default(),
             #[cfg(feature = "flutter")]
             pending_frame_callback_windows: HashSet::new(),
+            #[cfg(feature = "flutter")]
+            pending_layer_frame_callback_roots: HashSet::new(),
             #[cfg(feature = "flutter")]
             pending_input_method_frame_callbacks: HashSet::new(),
             #[cfg(feature = "flutter")]
@@ -559,6 +567,8 @@ impl WaylandFrontend {
             data_device_state,
             popups,
             seat,
+            layer_shell_state,
+            libinput,
             settings,
             shortcuts,
             keyboard_layout_names,

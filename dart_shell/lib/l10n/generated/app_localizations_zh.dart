@@ -1311,6 +1311,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsAutomaticIdleTitle => '自动空闲操作';
 
   @override
+  String get settingsPowerButtonTitle => '电源按钮';
+
+  @override
+  String get settingsPowerButtonAction => '操作';
+
+  @override
+  String get settingsPowerButtonDescription => '选择按下实体电源按钮时执行的操作。';
+
+  @override
+  String get settingsPowerButtonSuspend => '挂起';
+
+  @override
+  String get settingsPowerButtonHibernate => '休眠';
+
+  @override
+  String get settingsPowerButtonHibernateUnavailable => '休眠（不可用）';
+
+  @override
+  String get settingsPowerButtonDpms => '关闭显示器（DPMS）';
+
+  @override
+  String get settingsPowerButtonPowerOff => '关机';
+
+  @override
   String get settingsAutomaticLockToggle => '自动锁定';
 
   @override
@@ -1539,6 +1563,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsTransparencyTitle => '透明材质';
+
+  @override
+  String get settingsTypographyTitle => '字体';
 
   @override
   String get settingsTransparencyOff => '关闭';
@@ -1887,6 +1914,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsFocusedWindows => '聚焦窗口';
+
+  @override
+  String get settingsFontCatalogLoading => '正在查找已安装的字体…';
+
+  @override
+  String get settingsFontDescription => '在整个 Denial Shell 中使用系统默认字体或已安装的字体。';
+
+  @override
+  String get settingsFontFamily => '字体系列';
+
+  @override
+  String get settingsFontSystemDefault => '系统默认';
 
   @override
   String get settingsFocusedWindowBorder => '高亮聚焦窗口边框';

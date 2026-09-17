@@ -1,7 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-enum DenialWindowContentKind { surfaceTree, localFlutter }
+enum DenialWindowContentKind {
+  surfaceTree,
+  localFlutter,
+  layerShellBackground,
+  layerShellBottom,
+  layerShellTop,
+  layerShellOverlay,
+}
 
 enum DenialSurfaceRole { root, subsurface, popup }
 
@@ -202,6 +209,15 @@ class DenialWindow {
   bool get isLocalFlutter =>
       contentKind == DenialWindowContentKind.localFlutter;
 
+  bool get isLayerShell => switch (contentKind) {
+    DenialWindowContentKind.layerShellBackground ||
+    DenialWindowContentKind.layerShellBottom ||
+    DenialWindowContentKind.layerShellTop ||
+    DenialWindowContentKind.layerShellOverlay => true,
+    DenialWindowContentKind.surfaceTree ||
+    DenialWindowContentKind.localFlutter => false,
+  };
+
   bool get isHome => appId == 'denia-home' || title == 'denia-home';
 
   bool get isSystemUi =>
@@ -211,7 +227,7 @@ class DenialWindow {
       appId == 'denia-systemui-input-method' ||
       title == 'denia-systemui-input-method';
 
-  bool get isUserApp => !isHome && !isSystemUi;
+  bool get isUserApp => !isLayerShell && !isHome && !isSystemUi;
 
   /// Whether this scene entry should play Denial's one-time window entrance.
   ///

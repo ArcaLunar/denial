@@ -25,11 +25,11 @@ use super::super::PendingWindowEvent;
 use super::super::RuntimeState;
 use super::focus::request_keyboard_focus;
 use super::window_management::activate_window;
-#[cfg(feature = "flutter")]
 use super::window_management::{
-    ManagedClientStateRequest, apply_managed_client_state_request, apply_managed_minimize,
-    managed_client_grab_allowed, queue_restored_window_state,
+    ManagedClientStateRequest, apply_managed_client_state_request, managed_client_grab_allowed,
 };
+#[cfg(feature = "flutter")]
+use super::window_management::{apply_managed_minimize, queue_restored_window_state};
 use super::{
     KeyboardFocusTarget, MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, WindowIdentity,
     clamp_window_geometry, constrain_dimension,

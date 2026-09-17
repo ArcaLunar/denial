@@ -54,9 +54,8 @@ fn configured_window_size(
     }
 }
 
-#[cfg(feature = "flutter")]
 // Must match DesktopMetrics.frameBorder in the embedded shell.
-const SHELL_FRAME_BORDER: i32 = 1;
+pub(super) const SHELL_FRAME_BORDER: i32 = 1;
 
 #[cfg(feature = "flutter")]
 pub(super) fn shell_draws_server_frame(window: &Window) -> bool {
@@ -478,7 +477,7 @@ pub(in super::super) fn apply_window_commands(
                     let layout_geometry = {
                         let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
                         frontend
-                            .apply_layout_drop(&window, drop_location)
+                            .apply_layout_drop(&window, drop_location, None)
                             .then(|| frontend.window_geometry_target(&window))
                     };
                     if let Some(layout_geometry) = layout_geometry {
@@ -1249,12 +1248,16 @@ pub(super) fn toggle_always_on_top_focused_toplevel(state: &mut RuntimeState) ->
             true
         }
     };
-    if pinned && let Some(window) = client_window {
-        state
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .raise_window(&window, true);
+    if let Some(window) = client_window {
+        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        // Pinned windows are floating overlays in every layout. Reconcile
+        // immediately so pinning collapses the vacated tile and restores the
+        // saved stacking rectangle, while unpinning enrolls the current
+        // floating rectangle as the next restore geometry.
+        frontend.reconcile_window_layout(&window);
+        if pinned {
+            frontend.raise_window(&window, true);
+        }
     }
     state.scene_sync.mark_dirty();
     true
@@ -1614,6 +1617,7 @@ pub(super) fn toggle_shell_vertical_maximize_focused_toplevel(state: &mut Runtim
     true
 }
 
+#[cfg(feature = "flutter")]
 pub(super) fn toggle_shell_fullscreen_focused_toplevel(state: &mut RuntimeState) -> bool {
     if let Some(window_id) = focused_local_window(state) {
         queue_local_window_action(state, window_id, WindowAction::ToggleFullscreen);

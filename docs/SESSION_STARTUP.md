@@ -171,6 +171,15 @@ This avoids showing the desktop on wake or flashing the lock UI before power-off
 Native and Flutter bundles must both support this handshake; a missing or stale
 acknowledgement keeps a locked display off rather than presenting old content.
 
+Denial also holds a logind-compatible `sleep` delay inhibitor and observes
+`PrepareForSleep` for system suspend and hibernation. Before releasing that
+inhibitor, the native authentication gate closes and every output which was on
+is cleared through DRM DPMS. After resume, only those outputs are restored, and
+the same lock-frame handshake keeps KMS off until Flutter has produced a fresh
+lock frame. This covers sleep requested by Denial, logind idle policy, lid
+switches, and external logind clients without flashing the lock screen before
+the display goes black.
+
 ## Fingerprint unlock
 
 When fprintd is installed and the session user already has a fingerprint

@@ -114,12 +114,16 @@ impl flatbuffers::SimpleToVerifyInSlice for ObjectKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_CONTENT_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_WINDOW_CONTENT_KIND: u8 = 1;
+pub const ENUM_MAX_WINDOW_CONTENT_KIND: u8 = 5;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_WINDOW_CONTENT_KIND: [WindowContentKind; 2] = [
+pub const ENUM_VALUES_WINDOW_CONTENT_KIND: [WindowContentKind; 6] = [
   WindowContentKind::SurfaceTree,
   WindowContentKind::LocalFlutter,
+  WindowContentKind::LayerShellBackground,
+  WindowContentKind::LayerShellBottom,
+  WindowContentKind::LayerShellTop,
+  WindowContentKind::LayerShellOverlay,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -129,18 +133,30 @@ pub struct WindowContentKind(pub u8);
 impl WindowContentKind {
   pub const SurfaceTree: Self = Self(0);
   pub const LocalFlutter: Self = Self(1);
+  pub const LayerShellBackground: Self = Self(2);
+  pub const LayerShellBottom: Self = Self(3);
+  pub const LayerShellTop: Self = Self(4);
+  pub const LayerShellOverlay: Self = Self(5);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 1;
+  pub const ENUM_MAX: u8 = 5;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::SurfaceTree,
     Self::LocalFlutter,
+    Self::LayerShellBackground,
+    Self::LayerShellBottom,
+    Self::LayerShellTop,
+    Self::LayerShellOverlay,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
     match self {
       Self::SurfaceTree => Some("SurfaceTree"),
       Self::LocalFlutter => Some("LocalFlutter"),
+      Self::LayerShellBackground => Some("LayerShellBackground"),
+      Self::LayerShellBottom => Some("LayerShellBottom"),
+      Self::LayerShellTop => Some("LayerShellTop"),
+      Self::LayerShellOverlay => Some("LayerShellOverlay"),
       _ => None,
     }
   }

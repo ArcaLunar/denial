@@ -4,7 +4,7 @@ use denial_core::topology::{
     AtlasPlan, LogicalRect, OutputId, OutputSpec, OutputTransform, TopologySnapshot,
 };
 use smithay::backend::renderer::damage::OutputDamageTracker;
-use smithay::desktop::Window;
+use smithay::desktop::{Window, layer_map_for_output};
 use smithay::output::{Mode, Output, PhysicalProperties, Scale, Subpixel};
 use smithay::reexports::wayland_server::Resource;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -148,6 +148,7 @@ impl WaylandFrontend {
     pub fn update_topology(&mut self, snapshot: &TopologySnapshot) -> Result<(), Box<dyn Error>> {
         // Geometry, mode, transform, and output membership all invalidate the
         // meaning of outstanding exact frame opportunities as one operation.
+        #[cfg(feature = "flutter")]
         self.invalidate_frame_timeline();
         self.ticker_output = snapshot.ticker;
         let desktop_bounds = logical_bounds(snapshot)?;
@@ -199,6 +200,14 @@ impl WaylandFrontend {
             self.fail_output_power(removed_id);
             self.fail_screencopies_for_output(removed_id);
             let removed = self.outputs.swap_remove(index);
+            {
+                let mut map = layer_map_for_output(&removed.output);
+                let layers = map.layers().cloned().collect::<Vec<_>>();
+                for layer in layers {
+                    map.unmap_layer(&layer);
+                    layer.layer_surface().send_close();
+                }
+            }
             removed.output.leave_all();
             self.space.unmap_output(&removed.output);
             self.display_handle
@@ -256,6 +265,9 @@ impl WaylandFrontend {
             });
         }
         self.outputs.sort_by_key(|entry| entry.id);
+        for output in &self.outputs {
+            layer_map_for_output(&output.output).arrange();
+        }
         #[cfg(feature = "flutter")]
         self.reconcile_workspace_outputs();
 

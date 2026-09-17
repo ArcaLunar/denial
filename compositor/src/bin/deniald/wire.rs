@@ -502,6 +502,22 @@ pub enum SurfaceRoleDescription {
 pub enum WindowContentKind {
     SurfaceTree,
     LocalFlutter,
+    LayerShellBackground,
+    LayerShellBottom,
+    LayerShellTop,
+    LayerShellOverlay,
+}
+
+impl WindowContentKind {
+    pub const fn is_layer_shell(self) -> bool {
+        matches!(
+            self,
+            Self::LayerShellBackground
+                | Self::LayerShellBottom
+                | Self::LayerShellTop
+                | Self::LayerShellOverlay
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -516,6 +532,10 @@ impl WindowContentKind {
         match self {
             Self::SurfaceTree => fb::WindowContentKind::SurfaceTree,
             Self::LocalFlutter => fb::WindowContentKind::LocalFlutter,
+            Self::LayerShellBackground => fb::WindowContentKind::LayerShellBackground,
+            Self::LayerShellBottom => fb::WindowContentKind::LayerShellBottom,
+            Self::LayerShellTop => fb::WindowContentKind::LayerShellTop,
+            Self::LayerShellOverlay => fb::WindowContentKind::LayerShellOverlay,
         }
     }
 }
@@ -701,7 +721,10 @@ impl WireBridge {
     }
 
     pub fn window_ids(&self) -> impl Iterator<Item = u64> + '_ {
-        self.windows.iter().map(|window| window.window_id)
+        self.windows
+            .iter()
+            .filter(|window| !window.content_kind.is_layer_shell())
+            .map(|window| window.window_id)
     }
 
     pub fn window_descriptions(&self) -> &[WindowDescription] {

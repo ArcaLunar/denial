@@ -18,6 +18,13 @@ impl WaylandFrontend {
 
     pub(super) fn keyboard_focus_for_window(&self, window: &Window) -> Option<KeyboardFocusTarget> {
         if let Some(surface) = window.x11_surface() {
+            // Override-redirect windows are client-owned popups, not XWM
+            // activation targets. Giving one X keyboard focus would remove
+            // focus from its managed owner; clients such as Steam respond to
+            // that FocusOut by immediately dismissing the popup.
+            if surface.is_override_redirect() {
+                return None;
+            }
             // X11Surface implements the ICCCM focus handshake in addition to
             // forwarding wl_keyboard events to its associated wl_surface.
             surface.wl_surface()?;
@@ -755,11 +762,18 @@ impl WaylandFrontend {
         let Some(root_surface) = self.window_root_surface(window) else {
             return;
         };
+        #[cfg(feature = "flutter")]
         self.shell_vertical_restore_geometries
             .remove(&root_surface.id());
-        let committed_size_mismatch = window.geometry().size != target.size;
+        let previous_intent = self
+            .window_geometry_intents
+            .get(&root_surface.id())
+            .copied();
+        let intent = WindowGeometryIntent::for_contract(target, authority, previous_intent);
+        let contract_changed = previous_intent
+            .is_none_or(|previous| previous.target != target || previous.authority != authority);
         if let Some(managed) = ManagedWindow::new(window) {
-            managed.prepare_geometry_target(target, committed_size_mismatch);
+            managed.prepare_geometry_target(target, contract_changed);
         }
         // Space stores an element's *global geometry location*, not its
         // wl_surface render origin.  Window::geometry().loc is only the local
@@ -775,10 +789,8 @@ impl WaylandFrontend {
             // commit another buffer.
             self.window_geometry_intents.remove(&root_surface.id());
         } else {
-            self.window_geometry_intents.insert(
-                root_surface.id(),
-                WindowGeometryIntent { target, authority },
-            );
+            self.window_geometry_intents
+                .insert(root_surface.id(), intent);
         }
         self.update_window_output_membership(window);
         self.refresh_image_copy_constraints_if_changed();
@@ -804,13 +816,28 @@ impl WaylandFrontend {
         let Some(root_surface) = self.window_root_surface(window) else {
             return;
         };
-        let target = self
-            .window_geometry_intents
-            .get(&root_surface.id())
-            .map(|intent| intent.target)
-            .unwrap_or_else(|| self.window_geometry_target(window));
-        if let Some(managed) = ManagedWindow::new(window) {
-            managed.prepare_geometry_target(target, true);
+        let surface_id = root_surface.id();
+        let Some(intent) = self.window_geometry_intents.get_mut(&surface_id) else {
+            return;
+        };
+        let target = intent.target;
+        let authority = intent.authority;
+        match intent.claim_reassertion() {
+            WindowGeometryReassertionAction::Send => {
+                if let Some(managed) = ManagedWindow::new(window) {
+                    managed.prepare_geometry_target(target, true);
+                }
+            }
+            WindowGeometryReassertionAction::ReportSuppressed => {
+                warn!(
+                    ?surface_id,
+                    ?authority,
+                    target_width = target.size.w,
+                    target_height = target.size.h,
+                    "suppressed repeated window geometry reassertion to prevent a configure loop"
+                );
+            }
+            WindowGeometryReassertionAction::Suppress => {}
         }
         self.space.relocate_element(window, target.loc);
         self.update_window_output_membership(window);
@@ -875,15 +902,37 @@ impl WaylandFrontend {
             return;
         };
         let target = intent.target;
+        let authority = intent.authority;
         let committed = window.geometry();
         // `target.loc` and Space's element location use the same global
         // geometry coordinate system.  `committed.loc` remains surface-local
         // and must affect rendering only (Space subtracts it internally).
         self.space.relocate_element(window, target.loc);
-        if committed.size != target.size
-            && let Some(managed) = ManagedWindow::new(window)
-        {
-            managed.reassert_geometry_target(target, intent.authority.exact());
+        if committed.size != target.size {
+            let action = self
+                .window_geometry_intents
+                .get_mut(&surface_id)
+                .map(WindowGeometryIntent::claim_reassertion)
+                .unwrap_or(WindowGeometryReassertionAction::Suppress);
+            match action {
+                WindowGeometryReassertionAction::Send => {
+                    if let Some(managed) = ManagedWindow::new(window) {
+                        managed.reassert_geometry_target(target, authority.exact());
+                    }
+                }
+                WindowGeometryReassertionAction::ReportSuppressed => {
+                    warn!(
+                        ?surface_id,
+                        ?authority,
+                        committed_width = committed.size.w,
+                        committed_height = committed.size.h,
+                        target_width = target.size.w,
+                        target_height = target.size.h,
+                        "suppressed repeated window geometry reassertion to prevent a configure/commit loop"
+                    );
+                }
+                WindowGeometryReassertionAction::Suppress => {}
+            }
         }
         if !intent.retained_after_commit(committed.size) {
             self.window_geometry_intents.remove(&surface_id);
@@ -1306,6 +1355,7 @@ impl WaylandFrontend {
             self.remove_surface_shm_frame(&object_id);
             self.pending_surface_commits.remove(&object_id);
             self.pending_frame_callback_windows.remove(&object_id);
+            self.pending_layer_frame_callback_roots.remove(&object_id);
             self.pending_input_method_frame_callbacks.remove(&object_id);
             self.pending_cursor_frame_callback_roots.remove(&object_id);
             self.pending_shm_snapshots.remove(&object_id);

@@ -161,11 +161,14 @@ class _DesktopInputLayoutPublisherState
           }
         : const <int, Rect>{};
     Rect? outputClipFor(DesktopWindowPlacement placement) {
-      if (desktop.isInOverview(placement.objectId) ||
-          (switcher?.objectIds.contains(placement.objectId) ?? false)) {
-        return null;
-      }
-      return scrollingOutputRects[placement.monitorId];
+      return desktopScrollingOutputClip(
+        windowLayout: source.windowLayout,
+        pinned: windowsById[placement.objectId]?.pinned ?? false,
+        transformed:
+            desktop.isInOverview(placement.objectId) ||
+            (switcher?.objectIds.contains(placement.objectId) ?? false),
+        outputRect: scrollingOutputRects[placement.monitorId],
+      );
     }
 
     var shellRegions = <Rect>[canvas];

@@ -153,11 +153,33 @@ impl InputMethodPopup {
     }
 }
 
-#[derive(Debug, Default)]
-struct KeyboardRouteState {
-    resource: Option<ZwpInputMethodKeyboardGrabV2>,
-    active: bool,
+#[derive(Debug)]
+struct KeyboardRouteState<R = ZwpInputMethodKeyboardGrabV2> {
+    resource: Option<R>,
+    editor_active: bool,
     input_method_keys: HashSet<u32>,
+}
+
+impl<R> Default for KeyboardRouteState<R> {
+    fn default() -> Self {
+        Self {
+            resource: None,
+            editor_active: false,
+            input_method_keys: HashSet::new(),
+        }
+    }
+}
+
+impl<R: PartialEq> KeyboardRouteState<R> {
+    fn install_resource(&mut self, resource: R) {
+        self.resource = Some(resource);
+    }
+
+    fn remove_resource(&mut self, resource: &R) {
+        if self.resource.as_ref() == Some(resource) {
+            self.resource = None;
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -172,7 +194,7 @@ impl InputMethodKeyboardRoute {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        inner.resource = Some(resource);
+        inner.install_resource(resource);
     }
 
     fn remove(&self, resource: &ZwpInputMethodKeyboardGrabV2) {
@@ -180,17 +202,18 @@ impl InputMethodKeyboardRoute {
             .inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if inner.resource.as_ref() == Some(resource) {
-            inner.resource = None;
-            inner.active = false;
-        }
+        // Editor activation and keyboard-grab resource lifetimes are
+        // independent. Fcitx replaces its grab after every activate event;
+        // clearing activation while the old resource is destroyed would
+        // leave the replacement grab installed but permanently bypassed.
+        inner.remove_resource(resource);
     }
 
     fn set_active(&self, active: bool) {
         self.inner
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
-            .active = active;
+            .editor_active = active;
     }
 
     fn resource(&self) -> Option<ZwpInputMethodKeyboardGrabV2> {
@@ -264,7 +287,7 @@ impl KeyboardGrab<RuntimeState> for InputMethodKeyboardRoute {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let resource = inner.resource.clone().filter(Resource::is_alive);
         let route_to_input_method = match state {
-            KeyState::Pressed if inner.active && resource.is_some() => {
+            KeyState::Pressed if inner.editor_active && resource.is_some() => {
                 inner.input_method_keys.insert(raw);
                 true
             }
@@ -1319,7 +1342,7 @@ impl Dispatch<ZwpInputMethodKeyboardGrabV2, InputMethodKeyboardUserData> for Run
 
 #[cfg(test)]
 mod tests {
-    use super::EditorPublication;
+    use super::{EditorPublication, KeyboardRouteState};
 
     #[test]
     fn committed_enable_reactivates_an_existing_input_method() {
@@ -1327,5 +1350,23 @@ mod tests {
         assert!(EditorPublication::Activation.sends_activate(false));
         assert!(!EditorPublication::Update.sends_activate(true));
         assert!(EditorPublication::Update.sends_activate(false));
+    }
+
+    #[test]
+    fn replacing_keyboard_grab_preserves_active_editor_route() {
+        let mut route = KeyboardRouteState::<u32>::default();
+        route.editor_active = true;
+        route.install_resource(1);
+
+        // Fcitx releases the preceding grab before requesting a replacement
+        // for every activate event. The resource gap must not deactivate the
+        // editor-level route.
+        route.remove_resource(&1);
+        assert!(route.resource.is_none());
+        assert!(route.editor_active);
+
+        route.install_resource(2);
+        assert_eq!(route.resource, Some(2));
+        assert!(route.editor_active);
     }
 }

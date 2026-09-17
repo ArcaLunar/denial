@@ -669,6 +669,9 @@ pub(super) fn run_flutter_event_loop(
         dpms::synchronize_wake_gestures(scanouts, &mut events);
         synchronize_power_button(scanouts, &mut events);
         synchronize_fingerprint_display_wake(scanouts, &scheduler, &mut events);
+        // Sleep preparation is the final power-policy authority in this turn:
+        // it must override input or client wake requests before the DPMS gate.
+        synchronize_sleep_transition(scanouts, &mut events);
         // The synchronous VT-resume commit invalidated the old scheduler's
         // per-output buffer ownership. Preserve requests until the topology
         // path below recreates that scheduler.
@@ -686,6 +689,7 @@ pub(super) fn run_flutter_event_loop(
                 frame_scheduler.reconfigure(scanouts, Instant::now());
             }
         }
+        release_sleep_delay_if_ready(scanouts, &mut events);
         if events.output_control_dirty {
             // Publish DPMS changes at the single loop-boundary gate above
             // before processing more compositor or Flutter work.

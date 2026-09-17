@@ -43,7 +43,11 @@ class _ObjectKindReader extends fb.Reader<ObjectKind> {
 
 enum WindowContentKind {
   SurfaceTree(0),
-  LocalFlutter(1);
+  LocalFlutter(1),
+  LayerShellBackground(2),
+  LayerShellBottom(3),
+  LayerShellTop(4),
+  LayerShellOverlay(5);
 
   final int value;
   const WindowContentKind(this.value);
@@ -52,6 +56,10 @@ enum WindowContentKind {
     switch (value) {
       case 0: return WindowContentKind.SurfaceTree;
       case 1: return WindowContentKind.LocalFlutter;
+      case 2: return WindowContentKind.LayerShellBackground;
+      case 3: return WindowContentKind.LayerShellBottom;
+      case 4: return WindowContentKind.LayerShellTop;
+      case 5: return WindowContentKind.LayerShellOverlay;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -60,7 +68,7 @@ enum WindowContentKind {
       value == null ? null : WindowContentKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 1;
+  static const int maxValue = 5;
   static const fb.Reader<WindowContentKind> reader = _WindowContentKindReader();
 }
 
