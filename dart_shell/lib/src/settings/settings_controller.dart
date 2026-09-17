@@ -204,6 +204,15 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     );
   }
 
+  void setFontFamily(String value) {
+    final family = value.trim();
+    if (family.length > maximumShellFontFamilyLength ||
+        family.runes.any((rune) => rune < 0x20 || rune == 0x7f)) {
+      return;
+    }
+    _updateAppearance(fontFamily: family);
+  }
+
   void setCornerRadiusScale(double value) {
     _updateAppearance(
       cornerRadiusScale: value
@@ -659,6 +668,7 @@ class ShellSettingsController extends Notifier<ShellSettings> {
   }
 
   void _updateAppearance({
+    String? fontFamily,
     double? cornerRadiusScale,
     double? panelOpacity,
     double? cardOpacity,
@@ -676,6 +686,7 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _update(
       state.copyWith(
         appearance: state.appearance.copyWith(
+          fontFamily: fontFamily,
           cornerRadiusScale: cornerRadiusScale,
           panelOpacity: panelOpacity,
           cardOpacity: cardOpacity,

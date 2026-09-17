@@ -83,6 +83,7 @@ void main() {
         colorSchemePreference: DesktopColorSchemePreference.preferLight,
         accentSource: ShellAccentSource.custom,
         customAccentColor: Color(0xffc062ff),
+        fontFamily: 'Noto Sans',
         cornerRadiusScale: 1.35,
         panelOpacity: 0.78,
         transparencyMode: ShellTransparencyMode.glass,
@@ -300,12 +301,28 @@ void main() {
     });
   });
 
+  test('shell font family persists and produces a typed patch', () {
+    const previous = ShellSettings();
+    final next = previous.copyWith(
+      appearance: previous.appearance.copyWith(fontFamily: 'Noto Sans'),
+    );
+
+    expect(
+      ShellSettings.fromJson(next.toJson()).appearance.fontFamily,
+      'Noto Sans',
+    );
+    expect(next.differenceFrom(previous), <String, Object?>{
+      'appearance': <String, Object?>{'fontFamily': 'Noto Sans'},
+    });
+  });
+
   test('malformed settings fail safe and bounded values are clamped', () {
     final settings = ShellSettings.fromJson(<String, dynamic>{
       'version': 999,
       'localization': <String, dynamic>{'locale': 'future-locale'},
       'appearance': <String, dynamic>{
         'accentSource': 'future-source',
+        'fontFamily': 'invalid\u0000family',
         'windowRadius': 400,
         'panelOpacity': 0.01,
         'cursorSize': 400,
@@ -333,6 +350,7 @@ void main() {
 
     expect(settings.localization.locale, ShellLocalePreference.system);
     expect(settings.appearance.accentSource, ShellAccentSource.wallpaper);
+    expect(settings.appearance.fontFamily, isEmpty);
     expect(settings.appearance.cornerRadiusScale, ShellRoundness.maximum);
     expect(settings.appearance.panelOpacity, ShellOpacity.minimumPanel);
     expect(settings.appearance.cursorSize, shellCursorMaximumSize);

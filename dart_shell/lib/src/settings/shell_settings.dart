@@ -89,6 +89,7 @@ class ShellAppearanceSettings {
     this.colorSchemePreference = DesktopColorSchemePreference.preferDark,
     this.accentSource = ShellAccentSource.wallpaper,
     this.customAccentColor = ShellBrandColors.defaultAccent,
+    this.fontFamily = '',
     this.cornerRadiusScale = 0.3,
     this.panelOpacity = 0.75,
     this.cardOpacity = 0.4421052631578947,
@@ -107,6 +108,7 @@ class ShellAppearanceSettings {
   final DesktopColorSchemePreference colorSchemePreference;
   final ShellAccentSource accentSource;
   final Color customAccentColor;
+  final String fontFamily;
   final double cornerRadiusScale;
   final double panelOpacity;
   final double cardOpacity;
@@ -125,6 +127,7 @@ class ShellAppearanceSettings {
     DesktopColorSchemePreference? colorSchemePreference,
     ShellAccentSource? accentSource,
     Color? customAccentColor,
+    String? fontFamily,
     double? cornerRadiusScale,
     double? panelOpacity,
     double? cardOpacity,
@@ -144,6 +147,7 @@ class ShellAppearanceSettings {
           colorSchemePreference ?? this.colorSchemePreference,
       accentSource: accentSource ?? this.accentSource,
       customAccentColor: customAccentColor ?? this.customAccentColor,
+      fontFamily: fontFamily ?? this.fontFamily,
       cornerRadiusScale: cornerRadiusScale ?? this.cornerRadiusScale,
       panelOpacity: panelOpacity ?? this.panelOpacity,
       cardOpacity: cardOpacity ?? this.cardOpacity,
@@ -170,6 +174,7 @@ class ShellAppearanceSettings {
         other.colorSchemePreference == colorSchemePreference &&
         other.accentSource == accentSource &&
         other.customAccentColor == customAccentColor &&
+        other.fontFamily == fontFamily &&
         other.cornerRadiusScale == cornerRadiusScale &&
         other.panelOpacity == panelOpacity &&
         other.cardOpacity == cardOpacity &&
@@ -190,6 +195,7 @@ class ShellAppearanceSettings {
     colorSchemePreference,
     accentSource,
     customAccentColor,
+    fontFamily,
     cornerRadiusScale,
     panelOpacity,
     cardOpacity,
@@ -819,7 +825,7 @@ class ShellSettings {
 
   // Blur levels are additive in schema 9. Keep emitting the derived legacy
   // sigma so older shells can read settings written by this version.
-  static const int schemaVersion = 26;
+  static const int schemaVersion = 27;
 
   final ShellLocalizationSettings localization;
   final ShellAppearanceSettings appearance;
@@ -882,6 +888,9 @@ class ShellSettings {
       }
       if (appearance.customAccentColor != before.customAccentColor) {
         section['customAccentColor'] = appearance.customAccentColor.toARGB32();
+      }
+      if (appearance.fontFamily != before.fontFamily) {
+        section['fontFamily'] = appearance.fontFamily;
       }
       if (appearance.cornerRadiusScale != before.cornerRadiusScale) {
         section['cornerRadiusScale'] = appearance.cornerRadiusScale;
@@ -1081,6 +1090,7 @@ class ShellSettings {
         'colorSchemePreference': appearance.colorSchemePreference.name,
         'accentSource': appearance.accentSource.name,
         'customAccentColor': appearance.customAccentColor.toARGB32(),
+        'fontFamily': appearance.fontFamily,
         'cornerRadiusScale': appearance.cornerRadiusScale,
         'panelOpacity': appearance.panelOpacity,
         'cardOpacity': appearance.cardOpacity,
@@ -1251,6 +1261,10 @@ class ShellSettings {
         customAccentColor: _color(
           appearanceJson['customAccentColor'],
           defaults.appearance.customAccentColor,
+        ),
+        fontFamily: _fontFamily(
+          appearanceJson['fontFamily'],
+          defaults.appearance.fontFamily,
         ),
         cornerRadiusScale: _number(
           appearanceJson['cornerRadiusScale'],
@@ -1505,6 +1519,18 @@ class ShellSettings {
     power,
     applicationEnvironment,
   );
+}
+
+String _fontFamily(Object? value, String fallback) {
+  if (value is! String) {
+    return fallback;
+  }
+  final family = value.trim();
+  if (family.length > maximumShellFontFamilyLength ||
+      family.runes.any((rune) => rune < 0x20 || rune == 0x7f)) {
+    return fallback;
+  }
+  return family;
 }
 
 Map<String, Object> _placementToJson(ShellPopupPlacement placement) {

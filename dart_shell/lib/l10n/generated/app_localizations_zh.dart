@@ -1565,6 +1565,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsTransparencyTitle => '透明材质';
 
   @override
+  String get settingsTypographyTitle => '字体';
+
+  @override
   String get settingsTransparencyOff => '关闭';
 
   @override
@@ -1911,6 +1914,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsFocusedWindows => '聚焦窗口';
+
+  @override
+  String get settingsFontCatalogLoading => '正在查找已安装的字体…';
+
+  @override
+  String get settingsFontDescription => '在整个 Denial Shell 中使用系统默认字体或已安装的字体。';
+
+  @override
+  String get settingsFontFamily => '字体系列';
+
+  @override
+  String get settingsFontSystemDefault => '系统默认';
 
   @override
   String get settingsFocusedWindowBorder => '高亮聚焦窗口边框';

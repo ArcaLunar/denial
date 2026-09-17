@@ -2903,6 +2903,12 @@ abstract class AppLocalizations {
   /// **'Transparency material'**
   String get settingsTransparencyTitle;
 
+  /// Title for shell typography appearance settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Typography'**
+  String get settingsTypographyTitle;
+
   /// Transparency material choice that disables backdrop processing.
   ///
   /// In en, this message translates to:
@@ -3561,6 +3567,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Focused windows'**
   String get settingsFocusedWindows;
+
+  /// Description shown while the shell font catalog is loading.
+  ///
+  /// In en, this message translates to:
+  /// **'Finding installed fonts…'**
+  String get settingsFontCatalogLoading;
+
+  /// Explanation for the shell font family selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Use the system default or an installed font across the Denial shell.'**
+  String get settingsFontDescription;
+
+  /// Label for the shell font family selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Font family'**
+  String get settingsFontFamily;
+
+  /// Option that restores the platform's default font family.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsFontSystemDefault;
 
   /// Toggle label for changing the focused window border to the accent colour.
   ///

@@ -2297,6 +2297,10 @@
   "@settingsTransparencyTitle": {
     "description": "Title for choosing the visual material behind translucent shell surfaces."
   },
+  "settingsTypographyTitle": "Typography",
+  "@settingsTypographyTitle": {
+    "description": "Title for shell typography appearance settings."
+  },
   "settingsTransparencyOff": "Off",
   "@settingsTransparencyOff": {
     "description": "Transparency material choice that disables backdrop processing."
@@ -2769,6 +2773,22 @@
   "settingsFocusedWindows": "Focused windows",
   "@settingsFocusedWindows": {
     "description": "English UI text for settingsFocusedWindows."
+  },
+  "settingsFontCatalogLoading": "Finding installed fonts…",
+  "@settingsFontCatalogLoading": {
+    "description": "Description shown while the shell font catalog is loading."
+  },
+  "settingsFontDescription": "Use the system default or an installed font across the Denial shell.",
+  "@settingsFontDescription": {
+    "description": "Explanation for the shell font family selector."
+  },
+  "settingsFontFamily": "Font family",
+  "@settingsFontFamily": {
+    "description": "Label for the shell font family selector."
+  },
+  "settingsFontSystemDefault": "System default",
+  "@settingsFontSystemDefault": {
+    "description": "Option that restores the platform's default font family."
   },
   "settingsFocusedWindowBorder": "Highlight the focused window border",
   "@settingsFocusedWindowBorder": {
